@@ -56,8 +56,18 @@ jobs:
           packages: "platforms;android-37.0 build-tools;37.0.0"
       - name: Assemble debug APK
         working-directory: android
+        env:
+          SUPABASE_URL: ${{ secrets.SYSTEM_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SYSTEM_SUPABASE_PUBLISHABLE_KEY }}
         run: |
-          printf 'SUPABASE_URL=https://example.supabase.co\nSUPABASE_PUBLISHABLE_KEY=sb_publishable_ci_placeholder\n' > local.properties
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            printf 'SUPABASE_URL=%s\nSUPABASE_PUBLISHABLE_KEY=%s\n' "$SUPABASE_URL" "$SUPABASE_PUBLISHABLE_KEY" > local.properties
+          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            printf 'SUPABASE_URL=https://example.supabase.co\nSUPABASE_PUBLISHABLE_KEY=sb_publishable_ci_placeholder\n' > local.properties
+          else
+            echo "::error::Configure SYSTEM_SUPABASE_URL and SYSTEM_SUPABASE_PUBLISHABLE_KEY repository secrets."
+            exit 1
+          fi
           bash ./gradlew --no-daemon assembleDebug
       - uses: actions/upload-artifact@v7
         with:
