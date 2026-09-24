@@ -11,7 +11,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 | Supabase schema and server functions | Deployed | Seven migrations and four Edge Functions are live on the selected project. RLS and anonymous RPC rejection were checked. Re-run the security review after any schema change. |
 | MCP tools and OAuth server | Deployed; public discovery verified; owner link pending | An unauthenticated MCP initialize returns 401 with OAuth metadata, and the Supabase authorization-server metadata endpoint returns 200. ChatGPT Developer mode still needs to connect and finish the owner OAuth flow. |
 | Consent and email-code site | Previously deployed; current deployment access unverified | Production URL: [system-consent.vercel.app](https://system-consent.vercel.app). The connected Vercel account lists no accessible project, and this machine rejects the site's certificate chain. Auth Site URL and `/oauth/consent` also need final confirmation in Supabase Auth settings. |
-| Android dashboard and widget | Implemented; build, lint, and offline-queue test pass | Compose views, Room cache, Glance widget, completion queue, and WorkManager sync are present. A QA emulator rendered the signed-out screen; a Room instrumentation test confirms the optimistic completion and idempotency key survive database reopen. Signed-in/device sync remains unverified. |
+| Android dashboard and widget | Implemented; build, lint, sign-in smoke test, and offline-queue test pass | Compose views, Room cache, Glance widget, completion queue, and WorkManager sync are present. QA instrumentation verifies the email sign-in screen and address validation, plus persistence of optimistic completion and its idempotency key across database reopen. Signed-in/device sync remains unverified. |
 | Firebase push refresh | Waiting on account setup | Firebase CLI still reports no authorized account. No `google-services.json` or FCM service-account secrets are configured. A fresh Firebase CLI sign-in link was issued; browser control could not open it, so the owner must finish that login in Brave. |
 | Production milestone | Not yet proven end to end | Live checks show no Supabase Auth users and no registered device tokens. Verify ChatGPT create → Supabase row → push → closed-app widget after owner and Firebase setup. |
 
@@ -25,7 +25,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 - Polish widget sizing at compact and expanded sizes. Keep overdue and today first, dates on upcoming tasks, a useful empty state, and reachable completion/open-app actions.
 - Preserve task creation and editing in ChatGPT; the Android app should remain quick to scan and complete.
 
-**Accept when:** `assembleDebug` and lint pass; the dashboard and widget fit a small screen and large text without clipping; a completed item disappears from both views after sync. The offline queue persistence instrumentation test runs on the QA emulator.
+**Accept when:** `assembleDebug` and lint pass; the dashboard and widget fit a small screen and large text without clipping; a completed item disappears from both views after sync. The sign-in and offline queue persistence instrumentation tests pass on the QA emulator.
 
 ### 2. Verify local-first completion and sync recovery
 
@@ -92,8 +92,8 @@ The code and documentation can be completed independently. The hosted milestone 
 Checked on 24 September 2026:
 
 - Android `assembleDebug`, `assembleDebugAndroidTest`, `testDebugUnitTest`, and `lintDebug` succeeded. `testDebugUnitTest` still reports `NO-SOURCE`.
-- `connectedDebugAndroidTest` passed on the isolated `SYSTEM_CI_QA_20260924` emulator: 1 test, 0 failures. It verifies the cached optimistic completion and stable idempotency key survive a Room database close/reopen, then verifies successful queue removal.
-- Current debug APK: `android/app/build/outputs/apk/debug/app-debug.apk` (19,594,821 bytes; SHA-256 `BD7DDA3D767324C0CB46E30FEA4C8E363D0BACABA04B01A6466920A2331B3E0D`).
+- `connectedDebugAndroidTest` passed on the isolated `SYSTEM_CI_QA_20260924` emulator: 2 tests, 0 failures. It verifies email sign-in screen/address validation, and that the cached optimistic completion and stable idempotency key survive a Room database close/reopen before successful queue removal.
+- Current debug APK: `android/app/build/outputs/apk/debug/app-debug.apk` (19,594,920 bytes; SHA-256 `CF9576D2B66903F7B28CB9328D643422EAA5C92399A9C96A013E8539B86A9883`).
 - Android lint still reports 10 non-blocking warnings, mainly newer suggested dependency versions, target SDK 36, deprecated Android/Firebase calls, backup rules, and the launcher icon's missing monochrome layer.
 - Deno recurrence tests passed 5/5, and the documented `deno check --config supabase/deno.json` command passed for all four Edge Functions.
 - The clean QA emulator displayed sign-in in light and dark mode, including 360 dp width with 1.3 font scaling. Signed-in screens and the widget data flow remain unverified on a device.
