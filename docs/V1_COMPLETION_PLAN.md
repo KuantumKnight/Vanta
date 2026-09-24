@@ -10,10 +10,10 @@ This plan tracks the shortest dependable path from the current repository to a p
 |---|---|---|
 | Supabase schema and server functions | Deployed | Seven migrations and four Edge Functions are live on the selected project. RLS and anonymous RPC rejection were checked. Re-run the security review after any schema change. |
 | MCP tools and OAuth server | Deployed; public discovery verified; owner link pending | An unauthenticated MCP initialize returns 401 with OAuth metadata, and the Supabase authorization-server metadata endpoint returns 200. ChatGPT Developer mode still needs to connect and finish the owner OAuth flow. |
-| Consent and email-code site | Previously deployed; current deployment access unverified | Production URL: [system-consent.vercel.app](https://system-consent.vercel.app). The connected Vercel account lists no accessible project, and this machine rejects the site's certificate chain. Auth Site URL and `/oauth/consent` also need final confirmation in Supabase Auth settings. |
+| Consent and email-code site | Previously deployed; current deployment access unverified | Production URL: [system-consent.vercel.app](https://system-consent.vercel.app). The saved Vercel project link is `system-consent`, but the connected Vercel account gets 403 when listing its deployments and the local CLI cannot reach its API. Auth Site URL and `/oauth/consent` also need final confirmation in Supabase Auth settings. |
 | Android dashboard and widget | Implemented; build, lint, sign-in smoke test, and offline-queue test pass | Compose views, Room cache, Glance widget, completion queue, and WorkManager sync are present. QA instrumentation verifies the email sign-in screen and address validation, plus persistence of optimistic completion and its idempotency key across database reopen. Signed-in/device sync remains unverified. |
-| Firebase push refresh | Waiting on account setup | Firebase CLI still reports no authorized account. No `google-services.json` or FCM service-account secrets are configured. A fresh Firebase CLI sign-in link was issued; browser control could not open it, so the owner must finish that login in Brave. |
-| Production milestone | Not yet proven end to end | Live checks show no Supabase Auth users and no registered device tokens. Verify ChatGPT create → Supabase row → push → closed-app widget after owner and Firebase setup. |
+| Firebase push refresh | Android project configured; server credential pending | Firebase project `gdg-web-dev` now has package `dev.system.app` registered. Its `google-services.json` is valid, ignored by Git, and the Firebase-configured Android build passes. Supabase still has no FCM service-account secrets or registered device tokens. |
+| Production milestone | Not yet proven end to end | Live checks show no Supabase Auth users and no registered device tokens. Verify ChatGPT create → Supabase row → push → closed-app widget after owner OAuth linking and server-side FCM configuration. |
 
 ## Build sequence
 
@@ -47,8 +47,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 
 ### 4. Configure Firebase push refresh
 
-- Complete Firebase CLI sign-in in Brave and select or create the Firebase project for Android package `dev.system.app`.
-- Register the Android app and place its downloaded `google-services.json` in `android/app/` (the file is ignored by Git).
+- Firebase CLI sign-in, project selection (`gdg-web-dev`), Android app registration, and local `google-services.json` setup are complete.
 - Enable Cloud Messaging; create or select a service account with the required messaging permission.
 - Set `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, and `FCM_PRIVATE_KEY` as Supabase Edge Function secrets. Never put the private key in Android, Vercel, Git, or chat.
 - Rebuild and install the Firebase-configured APK; sign in, grant notifications, and verify the app registers an enabled device token.
@@ -76,7 +75,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 
 ## Critical path and external account steps
 
-The code and documentation can be completed independently. The hosted milestone is gated by three owner actions: finish Firebase sign-in, approve the Supabase Auth configuration for the consent origin, and complete ChatGPT Developer mode account linking. As soon as Firebase sign-in is available, continue the Firebase setup without waiting on the other two steps.
+The hosted milestone is gated by these remaining owner actions: configure an FCM service account in Supabase, approve the Supabase Auth configuration for the consent origin, and complete ChatGPT Developer mode account linking. Current Vercel project access also needs to be restored if the consent site needs a redeploy.
 
 ## Definition of done
 
@@ -91,9 +90,9 @@ The code and documentation can be completed independently. The hosted milestone 
 
 Checked on 24 September 2026:
 
-- Android `assembleDebug`, `assembleDebugAndroidTest`, `testDebugUnitTest`, and `lintDebug` succeeded. `testDebugUnitTest` still reports `NO-SOURCE`.
-- `connectedDebugAndroidTest` passed on the isolated `SYSTEM_CI_QA_20260924` emulator: 2 tests, 0 failures. It verifies email sign-in screen/address validation, and that the cached optimistic completion and stable idempotency key survive a Room database close/reopen before successful queue removal.
-- Current debug APK: `android/app/build/outputs/apk/debug/app-debug.apk` (19,594,920 bytes; SHA-256 `CF9576D2B66903F7B28CB9328D643422EAA5C92399A9C96A013E8539B86A9883`).
+- Android `assembleDebug`, `assembleDebugAndroidTest`, `testDebugUnitTest`, and `lintDebug` succeeded both before and after Firebase config was added. The Firebase-configured build ran `processDebugGoogleServices` successfully. `testDebugUnitTest` still reports `NO-SOURCE`.
+- `connectedDebugAndroidTest` passed on the isolated `SYSTEM_CI_QA_20260924` emulator after Firebase configuration: 2 tests, 0 failures, 0 errors. It verifies email sign-in screen/address validation, and that the cached optimistic completion and stable idempotency key survive a Room database close/reopen before successful queue removal.
+- Current Firebase-configured debug APK: `android/app/build/outputs/apk/debug/app-debug.apk` (20,442,275 bytes; SHA-256 `DD79488966C65E0D31CFCF5B5CF9110860C763E4C7FDC37564F389E8B60B3849`).
 - Android lint still reports 10 non-blocking warnings, mainly newer suggested dependency versions, target SDK 36, deprecated Android/Firebase calls, backup rules, and the launcher icon's missing monochrome layer.
 - Deno recurrence tests passed 5/5, and the documented `deno check --config supabase/deno.json` command passed for all four Edge Functions.
 - The clean QA emulator displayed sign-in in light and dark mode, including 360 dp width with 1.3 font scaling. Signed-in screens and the widget data flow remain unverified on a device.
@@ -101,4 +100,6 @@ Checked on 24 September 2026:
 - Live hosted checks: Supabase project is `ACTIVE_HEALTHY`; all four Edge Functions are active; the recurrence and reminder cron jobs are enabled. Unauthenticated MCP `initialize` returns 401, the protected-resource metadata returns 200, and the Auth OAuth-server metadata returns 200. The database currently has 0 auth users and 0 registered push devices.
 - The Supabase URL and publishable key in both ignored local configuration files (`android/local.properties` and `web/consent/.env.local`) match the selected hosted project. Values were compared without printing the key.
 - The Vercel deployment URL is documented from an earlier successful deployment, but current live verification is blocked: the Vercel connector shows no project for its linked team, and the local HTTPS client reports `UntrustedRoot`. Certificate validation was not bypassed.
-- Firebase CLI was checked again after the owner began sign-in; it still reports no authorized accounts. No `google-services.json` or FCM service-account secrets are configured. The ChatGPT OAuth account link is also not yet complete.
+- Firebase CLI is authenticated and exposes one project, `gdg-web-dev`; Android package `dev.system.app` is registered and the 1,032-byte `google-services.json` validates against its project/app IDs. It is git-ignored. The local Firebase CLI sometimes exits with a Windows Node assertion after completing a request; configuration output was validated independently.
+- The Firebase service-account email/private key are not configured in Supabase, and no Android user/device has signed in to register an FCM token. The ChatGPT OAuth account link is also not yet complete.
+- Vercel’s connected project lookup returned 403 for `system-consent`; local `vercel whoami` still fails to fetch its API. The Brave browser connector reported it could not load browser request-header policy, so no browser session could be inspected.

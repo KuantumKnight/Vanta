@@ -89,6 +89,8 @@ The debug APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 To enable push refresh, add the Firebase Android app for the application ID in `android/app/build.gradle.kts`, put its `google-services.json` at `android/app/google-services.json` (git-ignored), enable Firebase Cloud Messaging, and set the FCM service-account values above. Never commit the service-account key. Push delivery is best effort; periodic WorkManager sync is a recovery path and can run later than its 15-minute minimum interval.
 
+For the current SYSTEM setup, Firebase project `gdg-web-dev` has Android app `dev.system.app` registered. Its `google-services.json` is downloaded locally and ignored by Git. The remaining push setup is server-only: create/select a service account with Firebase Cloud Messaging permission and set its project ID, client email, and private key as Supabase Edge Function secrets.
+
 ## ChatGPT connection
 
 In ChatGPT Developer mode, add the private MCP server at:
