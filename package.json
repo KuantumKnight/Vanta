@@ -1,0 +1,8 @@
+{
+  "name": "system-tooling",
+  "private": true,
+  "description": "Pinned local development tools for SYSTEM",
+  "devDependencies": {
+    "supabase": "2.117.0"
+  }
+}

@@ -1,0 +1,30 @@
+project_id = "system"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 17
+
+[auth]
+site_url = "http://localhost:3000"
+
+[auth.oauth_server]
+enabled = true
+authorization_url_path = "/oauth/consent"
+allow_dynamic_registration = true
+
+[functions.mcp]
+verify_jwt = false
+
+[functions.sync-push]
+verify_jwt = false
+
+[functions.expand-schedules]
+verify_jwt = false
+
+[functions.send-reminders]
+verify_jwt = false
