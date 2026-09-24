@@ -9,11 +9,11 @@ This plan tracks the shortest dependable path from the current repository to a p
 | Area | Status | Evidence / remaining condition |
 |---|---|---|
 | Supabase schema and server functions | Deployed | Seven migrations and four Edge Functions are live on the selected project. RLS and anonymous RPC rejection were checked. Re-run the security review after any schema change. |
-| MCP tools and OAuth server | Deployed, account link pending | The endpoint rejects unauthenticated tool calls. ChatGPT Developer mode still needs to connect and finish the owner OAuth flow. |
+| MCP tools and OAuth server | Deployed; public discovery verified; owner link pending | An unauthenticated MCP initialize returns 401 with OAuth metadata, and the Supabase authorization-server metadata endpoint returns 200. ChatGPT Developer mode still needs to connect and finish the owner OAuth flow. |
 | Consent and email-code site | Deployed | Production URL: [system-consent.vercel.app](https://system-consent.vercel.app). Auth Site URL and `/oauth/consent` need final confirmation in Supabase Auth settings. |
 | Android dashboard and widget | Implemented; build, lint, and offline-queue test pass | Compose views, Room cache, Glance widget, completion queue, and WorkManager sync are present. A QA emulator rendered the signed-out screen; a Room instrumentation test confirms the optimistic completion and idempotency key survive database reopen. Signed-in/device sync remains unverified. |
-| Firebase push refresh | Waiting on account setup | Firebase CLI still reports no authorized account. No `google-services.json` or FCM service-account secrets are configured. |
-| Production milestone | Not yet proven end to end | No owner account/device token is registered yet. Verify ChatGPT create → Supabase row → push → closed-app widget after setup. |
+| Firebase push refresh | Waiting on account setup | Firebase CLI still reports no authorized account. No `google-services.json` or FCM service-account secrets are configured. A fresh Firebase CLI sign-in link was issued; browser control could not open it, so the owner must finish that login in Brave. |
+| Production milestone | Not yet proven end to end | Live checks show no Supabase Auth users and no registered device tokens. Verify ChatGPT create → Supabase row → push → closed-app widget after owner and Firebase setup. |
 
 ## Build sequence
 
@@ -98,4 +98,5 @@ Checked on 24 September 2026:
 - Deno recurrence tests passed 5/5, and the documented `deno check --config supabase/deno.json` command passed for all four Edge Functions.
 - The clean QA emulator displayed sign-in in light and dark mode, including 360 dp width with 1.3 font scaling. Signed-in screens and the widget data flow remain unverified on a device.
 - Consent-site lint/build and the Vercel production deployment passed earlier in this work; the consent site has not changed since.
+- Live hosted checks: Supabase project is `ACTIVE_HEALTHY`; all four Edge Functions are active; the recurrence and reminder cron jobs are enabled. Unauthenticated MCP `initialize` returns 401, the protected-resource metadata returns 200, and the Auth OAuth-server metadata returns 200. The database currently has 0 auth users and 0 registered push devices.
 - Firebase CLI was checked again after the owner began sign-in; it still reports no authorized accounts. No `google-services.json` or FCM service-account secrets are configured. The ChatGPT OAuth account link is also not yet complete.
