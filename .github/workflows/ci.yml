@@ -58,7 +58,7 @@ jobs:
         working-directory: android
         run: |
           printf 'SUPABASE_URL=https://example.supabase.co\nSUPABASE_PUBLISHABLE_KEY=sb_publishable_ci_placeholder\n' > local.properties
-          ./gradlew --no-daemon assembleDebug
+          bash ./gradlew --no-daemon assembleDebug
       - uses: actions/upload-artifact@v7
         with:
           name: system-debug-apk
