@@ -6,8 +6,10 @@ local.properties
 android/local.properties
 android/app/google-services.json
 android/.gradle/
+android/.gradle-tmp/
 android/build/
 android/app/build/
+.gradle-tmp/
 android/.tools/
 node_modules/
 web/consent/.next/

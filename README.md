@@ -18,6 +18,7 @@ SYSTEM is a personal task and habit dashboard for Android, with ChatGPT as the c
 5. Connect ChatGPT Developer mode to the Supabase `/functions/v1/mcp` endpoint and complete OAuth linking.
 
 See [docs/SETUP.md](docs/SETUP.md) for full instructions and [docs/VERIFICATION.md](docs/VERIFICATION.md) for acceptance checks.
+See [docs/V1_COMPLETION_PLAN.md](docs/V1_COMPLETION_PLAN.md) for current progress, remaining work, and the V1 definition of done.
 
 ## Product defaults
 

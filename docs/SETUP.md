@@ -74,6 +74,17 @@ cd android
 .\gradlew.bat assembleDebug
 ```
 
+If Gradle reports `Unable to establish loopback connection` under Java 17 on Windows, use a short, writable directory for Java's local Unix-domain sockets in that PowerShell session:
+
+```powershell
+New-Item -ItemType Directory -Force ..\.gradle-tmp | Out-Null
+$env:JAVA_TOOL_OPTIONS = "-Djdk.net.unixdomain.tmpdir=$((Resolve-Path ..\.gradle-tmp).Path)"
+.\gradlew.bat assembleDebug
+Remove-Item Env:JAVA_TOOL_OPTIONS
+```
+
+The temporary socket directory is ignored by Git. This is a per-shell workaround and does not change machine-wide Java settings.
+
 The debug APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Install it on a Google Play services device or emulator, request an email code, and complete sign-in in the app. For a single-owner account, allow the first sign-up, verify access, then turn off public sign-ups in Supabase Auth.
 
 To enable push refresh, add the Firebase Android app for the application ID in `android/app/build.gradle.kts`, put its `google-services.json` at `android/app/google-services.json` (git-ignored), enable Firebase Cloud Messaging, and set the FCM service-account values above. Never commit the service-account key. Push delivery is best effort; periodic WorkManager sync is a recovery path and can run later than its 15-minute minimum interval.
