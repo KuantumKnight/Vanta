@@ -123,16 +123,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createReminderChannel()
+        val app = application as SystemApplication
+        setContent { SystemScreen(app.repository, onSignedIn = ::requestNotificationPermissionIfNeeded) }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < 33) return
         val prefs = getSharedPreferences("system", MODE_PRIVATE)
-        if (Build.VERSION.SDK_INT >= 33 &&
-            !prefs.getBoolean("notification_prompted", false) &&
+        if (!prefs.getBoolean("notification_prompted", false) &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             prefs.edit().putBoolean("notification_prompted", true).apply()
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 401)
         }
-        val app = application as SystemApplication
-        setContent { SystemScreen(app.repository) }
     }
 
     override fun onStart() {
@@ -154,7 +157,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SystemScreen(repository: SystemRepository) {
+private fun SystemScreen(repository: SystemRepository, onSignedIn: () -> Unit) {
     val authenticated by repository.isAuthenticated.collectAsState(initial = null)
     val syncState by repository.syncState.collectAsState()
     val completionQueue by repository.completionQueue.collectAsState(initial = emptyList())
@@ -192,6 +195,7 @@ private fun SystemScreen(repository: SystemRepository) {
 
     LaunchedEffect(authenticated) {
         if (authenticated == true) {
+            onSignedIn()
             runCatching { repository.syncNow() }
             refreshGoals()
         }
