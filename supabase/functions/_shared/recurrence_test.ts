@@ -59,14 +59,14 @@ Deno.test("the minimum supported cadence fits the longest MCP expansion window",
   assertEquals(getOccurrences(schedule, from, to).length, 11617);
 });
 
-Deno.test("schedule expansion applies timezone, inclusion dates, and exceptions idempotently", () => {
+Deno.test("schedule expansion preserves Asia/Kolkata wall time on a UTC host and applies date exceptions", () => {
   const schedule: ScheduleForExpansion = {
     id: "schedule-1",
     task_id: "task-1",
     user_id: "user-1",
     dtstart: localDateTimeToUtc("2026-09-23", "08:00"),
     timezone: "Asia/Kolkata",
-    rrule: "FREQ=DAILY;COUNT=3",
+    rrule: "FREQ=DAILY;UNTIL=20260925T023000Z",
     rdates: [localDateTimeToUtc("2026-09-26", "08:00")],
     exdates: [localDateTimeToUtc("2026-09-24", "08:00")],
     effective_from: localDateTimeToUtc("2026-09-23"),

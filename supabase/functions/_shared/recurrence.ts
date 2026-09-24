@@ -3,9 +3,21 @@ import rrule from "npm:rrule@2.8.1";
 const { RRule, RRuleSet } = rrule;
 
 export const TIME_ZONE = "Asia/Kolkata";
+const TIME_ZONE_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 // 120 days at the supported 15-minute minimum is 11,520 occurrences; leave
 // room for up to 500 explicit inclusion dates in the same expansion window.
 export const MAX_OCCURRENCES = 20000;
+
+// rrule.js treats Date fields as floating local wall-clock time. Move stored
+// Asia/Kolkata instants onto that floating timeline explicitly so expansion is
+// stable when the Edge Function runs on a UTC host.
+function asFloatingLocalTime(instant: Date): Date {
+  return new Date(instant.getTime() + TIME_ZONE_OFFSET_MS);
+}
+
+function asUtcInstant(floatingLocalTime: Date): Date {
+  return new Date(floatingLocalTime.getTime() - TIME_ZONE_OFFSET_MS);
+}
 
 export function localDateTimeToUtc(date: string, time = "00:00"): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Date must use YYYY-MM-DD.");
@@ -157,20 +169,26 @@ export interface ScheduleForExpansion {
 export function getOccurrences(schedule: ScheduleForExpansion, from: Date, to: Date): Date[] {
   if (schedule.timezone !== TIME_ZONE) throw new Error("Only Asia/Kolkata schedules are supported.");
   const validatedRule = validateRRule(schedule.rrule);
-  const dtstart = new Date(schedule.dtstart);
-  const options = { ...RRule.parseString(validatedRule), dtstart, tzid: TIME_ZONE };
+  const parsedOptions = RRule.parseString(validatedRule);
+  const options = {
+    ...parsedOptions,
+    dtstart: asFloatingLocalTime(new Date(schedule.dtstart)),
+    ...(parsedOptions.until ? { until: asFloatingLocalTime(parsedOptions.until) } : {}),
+  };
   const set = new RRuleSet();
   set.rrule(new RRule(options));
-  for (const date of schedule.rdates ?? []) set.rdate(new Date(date));
-  for (const date of schedule.exdates ?? []) set.exdate(new Date(date));
-  const effectiveFrom = new Date(schedule.effective_from);
-  const lowerBound = from < effectiveFrom ? effectiveFrom : from;
-  const effectiveUntil = schedule.effective_until ? new Date(schedule.effective_until) : to;
-  const upperBound = to > effectiveUntil ? effectiveUntil : to;
+  for (const date of schedule.rdates ?? []) set.rdate(asFloatingLocalTime(new Date(date)));
+  for (const date of schedule.exdates ?? []) set.exdate(asFloatingLocalTime(new Date(date)));
+  const floatingFrom = asFloatingLocalTime(from);
+  const floatingTo = asFloatingLocalTime(to);
+  const effectiveFrom = asFloatingLocalTime(new Date(schedule.effective_from));
+  const effectiveUntil = schedule.effective_until ? asFloatingLocalTime(new Date(schedule.effective_until)) : floatingTo;
+  const lowerBound = floatingFrom < effectiveFrom ? effectiveFrom : floatingFrom;
+  const upperBound = floatingTo > effectiveUntil ? effectiveUntil : floatingTo;
   if (upperBound < lowerBound) return [];
   const occurrences: Date[] = [];
   set.between(lowerBound, upperBound, true, (date) => {
-    occurrences.push(date);
+    occurrences.push(asUtcInstant(date));
     return occurrences.length < MAX_OCCURRENCES;
   });
   if (occurrences.length >= MAX_OCCURRENCES) throw new Error("This recurrence creates too many occurrences for the requested window.");
