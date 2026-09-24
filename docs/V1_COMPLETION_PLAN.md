@@ -95,7 +95,7 @@ Checked on 24 September 2026:
 - `connectedDebugAndroidTest` passed on the isolated `SYSTEM_CI_QA_20260924` emulator: 1 test, 0 failures. It verifies the cached optimistic completion and stable idempotency key survive a Room database close/reopen, then verifies successful queue removal.
 - Current debug APK: `android/app/build/outputs/apk/debug/app-debug.apk` (19,594,821 bytes; SHA-256 `BD7DDA3D767324C0CB46E30FEA4C8E363D0BACABA04B01A6466920A2331B3E0D`).
 - Android lint still reports 10 non-blocking warnings, mainly newer suggested dependency versions, target SDK 36, deprecated Android/Firebase calls, backup rules, and the launcher icon's missing monochrome layer.
-- Deno recurrence tests passed 5/5 and type checks passed for all four Edge Functions.
+- Deno recurrence tests passed 5/5. A previous type check passed for all four Edge Functions; a repeat in this shell could not resolve the `npm:openai` peer referenced by Supabase's remote runtime types. Re-run with that npm dependency available before release.
 - The clean QA emulator displayed sign-in in light and dark mode, including 360 dp width with 1.3 font scaling. Signed-in screens and the widget data flow remain unverified on a device.
 - Consent-site lint/build and the Vercel production deployment passed earlier in this work; the consent site has not changed since.
 - Firebase CLI was checked again after the owner began sign-in; it still reports no authorized accounts. No `google-services.json` or FCM service-account secrets are configured. The ChatGPT OAuth account link is also not yet complete.
