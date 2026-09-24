@@ -11,7 +11,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 | Supabase schema and server functions | Deployed | Seven migrations and four Edge Functions are live on the selected project. RLS and anonymous RPC rejection were checked. Re-run the security review after any schema change. |
 | MCP tools and OAuth server | Deployed, account link pending | The endpoint rejects unauthenticated tool calls. ChatGPT Developer mode still needs to connect and finish the owner OAuth flow. |
 | Consent and email-code site | Deployed | Production URL: [system-consent.vercel.app](https://system-consent.vercel.app). Auth Site URL and `/oauth/consent` need final confirmation in Supabase Auth settings. |
-| Android dashboard and widget | Implemented; build and lint pass | Compose views, Room cache, Glance widget, completion queue, and WorkManager sync are present. A clean QA emulator rendered the signed-out screen. The signed-in/device workflow is still unverified. |
+| Android dashboard and widget | Implemented; build, lint, and offline-queue test pass | Compose views, Room cache, Glance widget, completion queue, and WorkManager sync are present. A QA emulator rendered the signed-out screen; a Room instrumentation test confirms the optimistic completion and idempotency key survive database reopen. Signed-in/device sync remains unverified. |
 | Firebase push refresh | Waiting on account setup | Firebase CLI still reports no authorized account. No `google-services.json` or FCM service-account secrets are configured. |
 | Production milestone | Not yet proven end to end | No owner account/device token is registered yet. Verify ChatGPT create → Supabase row → push → closed-app widget after setup. |
 
@@ -25,7 +25,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 - Polish widget sizing at compact and expanded sizes. Keep overdue and today first, dates on upcoming tasks, a useful empty state, and reachable completion/open-app actions.
 - Preserve task creation and editing in ChatGPT; the Android app should remain quick to scan and complete.
 
-**Accept when:** `assembleDebug` and lint pass; domain-level unit tests exist for the new business logic; the dashboard and widget fit a small screen and large text without clipping; a completed item disappears from both views after sync. The current Android module has no unit-test sources.
+**Accept when:** `assembleDebug` and lint pass; the dashboard and widget fit a small screen and large text without clipping; a completed item disappears from both views after sync. The offline queue persistence instrumentation test runs on the QA emulator.
 
 ### 2. Verify local-first completion and sync recovery
 
@@ -34,7 +34,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 - Confirm server state wins after refresh, including when a queued completion races with a ChatGPT update.
 - Check foreground sync, FCM-triggered one-time work, and periodic WorkManager recovery. Treat periodic work as delayed recovery, not a one-minute guarantee.
 
-**Accept when:** airplane-mode completion survives process restart, reconnect replays once, a rejected replay remains retryable, and a later successful fetch refreshes Room and Glance.
+**Accept when:** the optimistic completion and its stable idempotency key survive database reopen, reconnect replays once, a rejected replay remains retryable, and a later successful fetch refreshes Room and Glance. The persistence part is verified; network replay and server conflict behavior still need an authenticated end-to-end run.
 
 ### 3. Finish hosted Auth and ChatGPT linking
 
@@ -91,10 +91,11 @@ The code and documentation can be completed independently. The hosted milestone 
 
 Checked on 24 September 2026:
 
-- Android `assembleDebug` succeeded and produced `android/app/build/outputs/apk/debug/app-debug.apk`.
-- Android `lintDebug` succeeded after correcting the ignored local SDK path format. It still reports 10 non-blocking warnings, mainly newer suggested dependency versions, target SDK 36, deprecated Android/Firebase calls, backup rules, and the launcher icon's missing monochrome layer.
-- `testDebugUnitTest` reports `NO-SOURCE`; the Android module has no automated unit tests yet.
+- Android `assembleDebug`, `assembleDebugAndroidTest`, `testDebugUnitTest`, and `lintDebug` succeeded. `testDebugUnitTest` still reports `NO-SOURCE`.
+- `connectedDebugAndroidTest` passed on the isolated `SYSTEM_CI_QA_20260924` emulator: 1 test, 0 failures. It verifies the cached optimistic completion and stable idempotency key survive a Room database close/reopen, then verifies successful queue removal.
+- Current debug APK: `android/app/build/outputs/apk/debug/app-debug.apk` (19,594,821 bytes; SHA-256 `BD7DDA3D767324C0CB46E30FEA4C8E363D0BACABA04B01A6466920A2331B3E0D`).
+- Android lint still reports 10 non-blocking warnings, mainly newer suggested dependency versions, target SDK 36, deprecated Android/Firebase calls, backup rules, and the launcher icon's missing monochrome layer.
 - Deno recurrence tests passed 5/5 and type checks passed for all four Edge Functions.
 - The clean QA emulator displayed sign-in in light and dark mode, including 360 dp width with 1.3 font scaling. Signed-in screens and the widget data flow remain unverified on a device.
 - Consent-site lint/build and the Vercel production deployment passed earlier in this work; the consent site has not changed since.
-- Firebase sign-in is still pending, and the ChatGPT OAuth account link is not yet complete.
+- Firebase CLI was checked again after the owner began sign-in; it still reports no authorized accounts. No `google-services.json` or FCM service-account secrets are configured. The ChatGPT OAuth account link is also not yet complete.

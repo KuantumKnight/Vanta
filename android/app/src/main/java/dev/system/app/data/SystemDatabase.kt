@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +31,12 @@ interface SystemDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addPendingCompletion(item: PendingCompletion)
 
+    @Transaction
+    suspend fun queueCompletion(item: PendingCompletion, optimisticOccurrence: CachedOccurrence) {
+        addPendingCompletion(item)
+        replaceOccurrences(listOf(optimisticOccurrence))
+    }
+
     @Query("SELECT * FROM pending_completions ORDER BY queuedAt ASC")
     suspend fun pendingCompletions(): List<PendingCompletion>
 
@@ -42,8 +49,6 @@ interface SystemDao {
     @Query("DELETE FROM cached_occurrences")
     suspend fun clearOccurrences()
 
-    @Query("DELETE FROM pending_completions")
-    suspend fun clearCompletionQueue()
 }
 
 @Database(entities = [CachedOccurrence::class, PendingCompletion::class], version = 2, exportSchema = false)

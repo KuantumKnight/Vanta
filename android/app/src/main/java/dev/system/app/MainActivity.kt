@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +61,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -71,6 +74,7 @@ import dev.system.app.data.CachedOccurrence
 import dev.system.app.data.GoalProgress
 import dev.system.app.data.PendingCompletion
 import dev.system.app.data.SystemRepository
+import dev.system.app.data.SignOutBlockedException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -224,7 +228,12 @@ private fun SystemScreen(repository: SystemRepository, onSignedIn: () -> Unit) {
                             onSignOut = {
                                 scope.launch {
                                     runCatching { repository.signOut() }
-                                        .onFailure { snackbarHost.showSnackbar("Couldn’t sign out. Try again in a moment.") }
+                                        .onFailure { error ->
+                                            snackbarHost.showSnackbar(
+                                                (error as? SignOutBlockedException)?.message
+                                                    ?: "Couldn’t sign out. Try again in a moment.",
+                                            )
+                                        }
                                 }
                             },
                         )
@@ -409,7 +418,9 @@ private fun SignInScreen(repository: SystemRepository) {
                             message,
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (messageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 8.dp),
+                            modifier = Modifier.padding(top = 8.dp).semantics {
+                                liveRegion = LiveRegionMode.Polite
+                            },
                         )
                     }
                 }
@@ -426,6 +437,7 @@ private fun DashboardTopBar(
     onSignOut: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    var confirmSignOut by remember { mutableStateOf(false) }
     TopAppBar(
         title = {
             Column {
@@ -444,12 +456,30 @@ private fun DashboardTopBar(
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     DropdownMenuItem(
                         text = { Text("Sign out") },
-                        onClick = { menuExpanded = false; onSignOut() },
+                        onClick = { menuExpanded = false; confirmSignOut = true },
                     )
                 }
             }
         },
     )
+    if (confirmSignOut) {
+        AlertDialog(
+            onDismissRequest = { confirmSignOut = false },
+            title = { Text("Sign out of SYSTEM?") },
+            text = { Text("Saved completions will sync first, and reminders for this device will be turned off.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmSignOut = false
+                        onSignOut()
+                    },
+                ) { Text("Sign out") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmSignOut = false }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -4,6 +4,7 @@ import android.content.Context
 import dev.system.app.BuildConfig
 import dev.system.app.widget.SystemWidget
 import androidx.glance.appwidget.updateAll
+import com.google.firebase.FirebaseApp
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
@@ -71,42 +72,56 @@ class SystemRepository(private val context: Context, private val database: Syste
     }
 
     suspend fun signOut() = syncMutex.withLock {
-        runCatching {
-            val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
-            client.from("device_tokens").update(DeviceTokenStatus(enabled = false)) {
-                filter { eq("token", token) }
+        if (dao.pendingCompletions().isNotEmpty()) {
+            try {
+                syncLocked()
+            } catch (error: Throwable) {
+                throw SignOutBlockedException(
+                    "Connect to the internet and sync saved completions before signing out.",
+                    error,
+                )
+            }
+            if (dao.pendingCompletions().isNotEmpty()) {
+                throw SignOutBlockedException("Sync saved completions before signing out.")
             }
         }
+
+        unregisterFcmTokens()
         client.auth.signOut()
         dao.clearOccurrences()
-        dao.clearCompletionQueue()
         SystemWidget().updateAll(context)
     }
 
-    suspend fun complete(occurrenceId: String) {
-        val row = dao.occurrence(occurrenceId) ?: return
-        if (row.status != "pending") return
+    suspend fun complete(occurrenceId: String) = syncMutex.withLock {
+        val row = dao.occurrence(occurrenceId) ?: return@withLock
+        if (row.status != "pending") return@withLock
         val key = UUID.randomUUID().toString()
-        dao.addPendingCompletion(PendingCompletion(idempotencyKey = key, occurrenceId = occurrenceId))
-        dao.replaceOccurrences(listOf(row.copy(status = "completed", completedAt = Instant.now().toString())))
+        dao.queueCompletion(
+            PendingCompletion(idempotencyKey = key, occurrenceId = occurrenceId),
+            row.copy(status = "completed", completedAt = Instant.now().toString()),
+        )
         SystemWidget().updateAll(context)
         try {
-            syncNow()
+            syncLocked()
         } catch (error: Throwable) {
             dev.system.app.sync.SyncWorker.enqueue(context)
             throw error
         }
     }
 
-    suspend fun queueCompletion(occurrenceId: String) {
-        val row = dao.occurrence(occurrenceId) ?: return
-        if (row.status != "pending") return
-        dao.addPendingCompletion(PendingCompletion(UUID.randomUUID().toString(), occurrenceId))
-        dao.replaceOccurrences(listOf(row.copy(status = "completed", completedAt = Instant.now().toString())))
+    suspend fun queueCompletion(occurrenceId: String) = syncMutex.withLock {
+        val row = dao.occurrence(occurrenceId) ?: return@withLock
+        if (row.status != "pending") return@withLock
+        dao.queueCompletion(
+            PendingCompletion(UUID.randomUUID().toString(), occurrenceId),
+            row.copy(status = "completed", completedAt = Instant.now().toString()),
+        )
         SystemWidget().updateAll(context)
     }
 
-    suspend fun syncNow() = syncMutex.withLock {
+    suspend fun syncNow() = syncMutex.withLock { syncLocked() }
+
+    private suspend fun syncLocked() {
         withContext(Dispatchers.IO) {
             client.auth.awaitInitialization()
             if (currentUser == null) client.auth.loadFromStorage(autoRefresh = true)
@@ -181,6 +196,7 @@ class SystemRepository(private val context: Context, private val database: Syste
     private suspend fun registerFcmToken() {
         try {
             val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+            rememberFcmToken(token)
             client.from("device_tokens").upsert(DeviceTokenInsert(token = token)) {
                 onConflict = "token"
             }
@@ -188,7 +204,56 @@ class SystemRepository(private val context: Context, private val database: Syste
             // Firebase is not configured until google-services.json is added.
         }
     }
+
+    private suspend fun unregisterFcmTokens() {
+        val preferences = context.getSharedPreferences("system", Context.MODE_PRIVATE)
+        val tokens = preferences.getStringSet(FCM_TOKENS_PREFERENCE, emptySet()).orEmpty().toMutableSet()
+        if (FirebaseApp.getApps(context).isNotEmpty()) {
+            val currentToken = try {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+            } catch (error: Throwable) {
+                if (tokens.isEmpty()) {
+                    throw SignOutBlockedException(
+                        "Connect to the internet before signing out so SYSTEM can disable reminders on this device.",
+                        error,
+                    )
+                }
+                null
+            }
+            if (currentToken != null) tokens += currentToken
+        }
+        if (tokens.isEmpty()) return
+
+        try {
+            tokens.forEach { token ->
+                client.from("device_tokens").update(DeviceTokenStatus(enabled = false)) {
+                    filter { eq("token", token) }
+                }
+            }
+        } catch (error: Throwable) {
+            throw SignOutBlockedException(
+                "Connect to the internet before signing out so SYSTEM can disable reminders on this device.",
+                error,
+            )
+        }
+        preferences.edit().remove(FCM_TOKENS_PREFERENCE).commit()
+    }
+
+    private fun rememberFcmToken(token: String) {
+        val preferences = context.getSharedPreferences("system", Context.MODE_PRIVATE)
+        val tokens = preferences.getStringSet(FCM_TOKENS_PREFERENCE, emptySet()).orEmpty().toMutableSet()
+        tokens += token
+        check(preferences.edit().putStringSet(FCM_TOKENS_PREFERENCE, tokens).commit()) {
+            "Could not save the notification token for sign-out cleanup."
+        }
+    }
+
+    companion object {
+        private const val FCM_TOKENS_PREFERENCE = "registered_fcm_tokens"
+    }
 }
+
+class SignOutBlockedException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
 
 data class SyncState(
     val syncing: Boolean = true,
