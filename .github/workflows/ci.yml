@@ -53,7 +53,7 @@ jobs:
           java-version: 17
       - uses: android-actions/setup-android@v4
         with:
-          packages: "platforms;android-37,build-tools;37.0.0"
+          packages: "platforms;android-37.0 build-tools;37.0.0"
       - name: Assemble debug APK
         working-directory: android
         run: |
