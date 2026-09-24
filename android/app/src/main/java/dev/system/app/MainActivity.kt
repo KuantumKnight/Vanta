@@ -186,7 +186,7 @@ private fun SystemScreen(repository: SystemRepository) {
         goalsError = null
         runCatching { repository.loadGoals() }
             .onSuccess { goals = it }
-            .onFailure { goalsError = it.message ?: "Could not load goals." }
+            .onFailure { goalsError = "Couldn’t load your goals. Check your connection and try again." }
         goalsLoading = false
     }
 
@@ -220,7 +220,7 @@ private fun SystemScreen(repository: SystemRepository) {
                             onSignOut = {
                                 scope.launch {
                                     runCatching { repository.signOut() }
-                                        .onFailure { snackbarHost.showSnackbar(it.message ?: "Could not sign out.") }
+                                        .onFailure { snackbarHost.showSnackbar("Couldn’t sign out. Try again in a moment.") }
                                 }
                             },
                         )
@@ -336,7 +336,7 @@ private fun SignInScreen(repository: SystemRepository) {
                                 scope.launch {
                                     runCatching { repository.requestEmailCode(email) }
                                         .onSuccess { sent = true; message = "Code sent. It may take a minute to arrive."; messageIsError = false }
-                                        .onFailure { message = it.message ?: "Could not send a code."; messageIsError = true }
+                                        .onFailure { message = "Couldn’t send a code. Check the address and try again."; messageIsError = true }
                                     busy = false
                                 }
                             },
@@ -371,7 +371,7 @@ private fun SignInScreen(repository: SystemRepository) {
                                 scope.launch {
                                     runCatching { repository.verifyEmailCode(email, code) }
                                         .onSuccess { message = "Signed in. Loading your tasks…"; messageIsError = false }
-                                        .onFailure { message = it.message ?: "That code didn’t work. Try again."; messageIsError = true }
+                                        .onFailure { message = "That code expired or wasn’t accepted. Request a new one and try again."; messageIsError = true }
                                     busy = false
                                 }
                             },
@@ -391,7 +391,7 @@ private fun SignInScreen(repository: SystemRepository) {
                                         busy = true
                                         runCatching { repository.requestEmailCode(email) }
                                             .onSuccess { message = "A fresh code is on its way."; messageIsError = false }
-                                            .onFailure { message = it.message ?: "Could not resend the code."; messageIsError = true }
+                                            .onFailure { message = "Couldn’t resend the code. Check your connection and try again."; messageIsError = true }
                                         busy = false
                                     }
                                 },
@@ -597,12 +597,13 @@ private fun CompletionQueueCard(items: List<PendingCompletion>, onRetry: () -> U
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    items.size.toString() + " completion" + if (items.size == 1) "" else "s" + " waiting to sync",
+                    items.size.toString() + " completion" + (if (items.size == 1) "" else "s") + " waiting to sync",
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
                 Text(
-                    items.firstOrNull()?.lastError ?: "Saved on this phone",
+                    if (items.any { it.lastError != null }) "A saved change needs another try."
+                    else "Saved on this phone",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     maxLines = 2,

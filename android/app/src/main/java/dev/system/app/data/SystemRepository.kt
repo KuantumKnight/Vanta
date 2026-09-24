@@ -26,12 +26,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import java.time.Instant
 import java.util.UUID
 
 class SystemRepository(private val context: Context, private val database: SystemDatabase) {
     private val dao = database.systemDao()
+    private val syncMutex = Mutex()
     private val mutableSyncState = MutableStateFlow(SyncState())
     val syncState = mutableSyncState.asStateFlow()
     private val client: SupabaseClient = createSupabaseClient(
@@ -67,7 +70,7 @@ class SystemRepository(private val context: Context, private val database: Syste
         client.auth.verifyEmailOtp(type = OtpType.Email.EMAIL, email = email.trim(), token = code.trim())
     }
 
-    suspend fun signOut() {
+    suspend fun signOut() = syncMutex.withLock {
         runCatching {
             val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
             client.from("device_tokens").update(DeviceTokenStatus(enabled = false)) {
@@ -103,65 +106,67 @@ class SystemRepository(private val context: Context, private val database: Syste
         SystemWidget().updateAll(context)
     }
 
-    suspend fun syncNow() = withContext(Dispatchers.IO) {
-        client.auth.awaitInitialization()
-        if (currentUser == null) client.auth.loadFromStorage(autoRefresh = true)
-        if (currentUser == null) return@withContext
-        mutableSyncState.value = mutableSyncState.value.copy(syncing = true, error = null)
-        try {
-            val queued = dao.pendingCompletions()
-            for (item in queued) {
-                try {
-                    client.postgrest.rpc(
-                        "complete_task_occurrence",
-                        CompletionParams(item.occurrenceId, item.idempotencyKey),
-                    )
-                    dao.removePendingCompletion(item.idempotencyKey)
-                } catch (error: Throwable) {
-                    dao.setCompletionError(item.idempotencyKey, error.message ?: "Could not sync completion")
-                    throw error
+    suspend fun syncNow() = syncMutex.withLock {
+        withContext(Dispatchers.IO) {
+            client.auth.awaitInitialization()
+            if (currentUser == null) client.auth.loadFromStorage(autoRefresh = true)
+            if (currentUser == null) return@withContext
+            mutableSyncState.value = mutableSyncState.value.copy(syncing = true, error = null)
+            try {
+                val queued = dao.pendingCompletions()
+                for (item in queued) {
+                    try {
+                        client.postgrest.rpc(
+                            "complete_task_occurrence",
+                            CompletionParams(item.occurrenceId, item.idempotencyKey),
+                        )
+                        dao.removePendingCompletion(item.idempotencyKey)
+                    } catch (error: Throwable) {
+                        dao.setCompletionError(item.idempotencyKey, "Could not sync completion yet")
+                        throw error
+                    }
                 }
-            }
 
-            val upperBound = Instant.now().plusSeconds(120 * 86400L).toString()
-            val columns = Columns.raw("""
+                val upperBound = Instant.now().plusSeconds(120 * 86400L).toString()
+                val columns = Columns.raw("""
             id,task_id,scheduled_for,all_day,status,completed_at,
             task:tasks!inner(title,notes,archived_at)
         """.trimIndent())
-            val datedRows = client.from("task_occurrences").select(columns = columns) {
-                filter {
-                    eq("status", "pending")
-                    filter("scheduled_for", FilterOperator.LTE, upperBound)
+                val datedRows = client.from("task_occurrences").select(columns = columns) {
+                    filter {
+                        eq("status", "pending")
+                        filter("scheduled_for", FilterOperator.LTE, upperBound)
+                    }
+                    order("scheduled_for", Order.ASCENDING)
+                    limit(250)
                 }
-                order("scheduled_for", Order.ASCENDING)
-                limit(250)
-            }
-                .decodeList<OccurrenceResponse>()
-                .filter { it.task.archivedAt == null }
-                .map { it.toCache() }
-            val unscheduledRows = client.from("task_occurrences").select(columns = columns) {
-                filter {
-                    eq("status", "pending")
-                    exact("scheduled_for", null)
+                    .decodeList<OccurrenceResponse>()
+                    .filter { it.task.archivedAt == null }
+                    .map { it.toCache() }
+                val unscheduledRows = client.from("task_occurrences").select(columns = columns) {
+                    filter {
+                        eq("status", "pending")
+                        exact("scheduled_for", null)
+                    }
+                    limit(100)
                 }
-                limit(100)
-            }
-                .decodeList<OccurrenceResponse>()
-                .filter { it.task.archivedAt == null }
-                .map { it.toCache() }
-            val rows = datedRows + unscheduledRows
+                    .decodeList<OccurrenceResponse>()
+                    .filter { it.task.archivedAt == null }
+                    .map { it.toCache() }
+                val rows = datedRows + unscheduledRows
 
-            dao.clearOccurrences()
-            if (rows.isNotEmpty()) dao.replaceOccurrences(rows)
-            registerFcmToken()
-            SystemWidget().updateAll(context)
-            mutableSyncState.value = SyncState(syncing = false, lastSyncedAt = Instant.now().toString())
-        } catch (error: Throwable) {
-            mutableSyncState.value = mutableSyncState.value.copy(
-                syncing = false,
-                error = error.message ?: "Could not sync tasks.",
-            )
-            throw error
+                dao.clearOccurrences()
+                if (rows.isNotEmpty()) dao.replaceOccurrences(rows)
+                registerFcmToken()
+                SystemWidget().updateAll(context)
+                mutableSyncState.value = SyncState(syncing = false, lastSyncedAt = Instant.now().toString())
+            } catch (error: Throwable) {
+                mutableSyncState.value = mutableSyncState.value.copy(
+                    syncing = false,
+                    error = "Could not sync tasks.",
+                )
+                throw error
+            }
         }
     }
 

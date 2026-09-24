@@ -76,17 +76,19 @@ class SystemWidget : GlanceAppWidget() {
         val openApp = actionStartActivity(Intent(context, MainActivity::class.java))
         provideContent {
             val size = LocalSize.current
+            val compact = size.height < 150.dp
             val visibleUrgentLimit = when {
-                size.height < 150.dp -> 0
+                compact -> 1
                 size.height < 210.dp -> 1
                 else -> 2
             }
             val visibleUpcomingLimit = when {
-                size.height < 150.dp -> 1
+                compact && urgent.isEmpty() -> 1
+                compact -> 0
                 size.height < 210.dp -> 2
                 else -> 3
             }
-            val showSectionHeadings = size.height >= 150.dp
+            val showSectionHeadings = !compact
             val shownUrgent = urgent.take(visibleUrgentLimit)
             val shownUpcoming = upcoming.take(visibleUpcomingLimit)
 
@@ -98,7 +100,6 @@ class SystemWidget : GlanceAppWidget() {
                         Text("SYSTEM", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = accent))
                         Text(today.format(DateTimeFormatter.ofPattern("EEE, d MMM")), style = TextStyle(fontSize = 12.sp, color = muted))
                     }
-                    Text("Open", style = TextStyle(fontSize = 12.sp, color = accent), modifier = GlanceModifier.clickable(openApp))
                 }
 
                 if (showSectionHeadings && visibleUrgentLimit > 0) {
@@ -107,7 +108,16 @@ class SystemWidget : GlanceAppWidget() {
                 if (shownUrgent.isEmpty() && showSectionHeadings) {
                     Text("Nothing due today", style = TextStyle(fontSize = 13.sp, color = muted), modifier = GlanceModifier.padding(vertical = 3.dp))
                 }
-                shownUrgent.forEach { row -> OccurrenceRow(row.title, row.id, foreground, openApp) }
+                shownUrgent.forEach { row ->
+                    val date = row.scheduledFor?.let { Instant.parse(it).atZone(zone).toLocalDate() }
+                    val label = when {
+                        date == null -> row.title
+                        date.isBefore(today) -> "Overdue · ${date.format(DateTimeFormatter.ofPattern("d MMM"))} · ${row.title}"
+                        compact -> "Today · ${row.title}"
+                        else -> row.title
+                    }
+                    OccurrenceRow(label, row.id, foreground, openApp)
+                }
 
                 if (showSectionHeadings && visibleUpcomingLimit > 0) {
                     WidgetSection("UPCOMING", foreground)
@@ -125,7 +135,11 @@ class SystemWidget : GlanceAppWidget() {
                         modifier = GlanceModifier.padding(top = 8.dp).clickable(openApp),
                     )
                 } else if (shownUrgent.size < urgent.size || shownUpcoming.size < upcoming.size) {
-                    Text("Open SYSTEM to see all", style = TextStyle(fontSize = 11.sp, color = accent), modifier = GlanceModifier.padding(top = 4.dp))
+                    Text(
+                        "Open SYSTEM to see all",
+                        style = TextStyle(fontSize = 11.sp, color = accent),
+                        modifier = GlanceModifier.padding(top = 4.dp).clickable(openApp),
+                    )
                 }
             }
         }
