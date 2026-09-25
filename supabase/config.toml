@@ -10,7 +10,11 @@ max_rows = 1000
 major_version = 17
 
 [auth]
-site_url = "http://localhost:3000"
+site_url = "https://system-consent.vercel.app"
+additional_redirect_urls = [
+  "http://localhost:3000/**",
+  "https://system-consent.vercel.app/auth/callback",
+]
 
 [auth.oauth_server]
 enabled = true

@@ -3,21 +3,32 @@
 import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
-export default function LoginPage({ redirectTo }: { redirectTo: string }) {
+export default function LoginPage({
+  redirectTo,
+  initialError,
+}: {
+  redirectTo: string;
+  initialError?: string;
+}) {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError ?? "");
 
   async function sendCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError("");
     const supabase = createClient();
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", redirectTo);
     const { error: requestError } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: callbackUrl.toString(),
+      },
     });
     setBusy(false);
     if (requestError) {

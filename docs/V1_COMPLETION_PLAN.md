@@ -1,6 +1,6 @@
 # SYSTEM V1 completion plan
 
-Updated: 24 September 2026
+Updated: 25 September 2026
 
 This plan tracks the shortest dependable path from the current repository to a polished, working SYSTEM V1. Supabase remains the authority for task data. Room is a cache; ChatGPT is the task command center; Android is the review and completion surface.
 
@@ -10,7 +10,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 |---|---|---|
 | Supabase schema and server functions | Deployed | Seven migrations and four Edge Functions are live on the selected project. RLS and anonymous RPC rejection were checked. Re-run the security review after any schema change. |
 | MCP tools and OAuth server | Deployed; public discovery verified; owner link pending | An unauthenticated MCP initialize returns 401 with OAuth metadata, and the Supabase authorization-server metadata endpoint returns 200. ChatGPT Developer mode still needs to connect and finish the owner OAuth flow. |
-| Consent and email-code site | Previously deployed; current deployment access unverified | Production URL: [system-consent.vercel.app](https://system-consent.vercel.app). The saved Vercel project link is `system-consent`, but the connected Vercel account gets 403 when listing its deployments and the local CLI cannot reach its API. Auth Site URL and `/oauth/consent` also need final confirmation in Supabase Auth settings. |
+| Consent and email-code site | Redirect fix implemented; hosted deployment and Auth settings need verification | The login now supplies an explicit same-host callback and the callback exchanges email links into SSR cookies. `npm run lint` and `npm run build` pass locally. Production URL: [system-consent.vercel.app](https://system-consent.vercel.app). Vercel API access still returns no accessible projects; Supabase Auth Site URL and redirect allowlist must be updated to remove the localhost fallback. |
 | Android dashboard and widget | Implemented; build, lint, sign-in smoke test, and offline-queue test pass | Compose views, Room cache, Glance widget, completion queue, and WorkManager sync are present. QA instrumentation verifies the email sign-in screen and address validation, plus persistence of optimistic completion and its idempotency key across database reopen. Signed-in/device sync remains unverified. |
 | Firebase push refresh | Android project configured; server credential pending | Firebase project `gdg-web-dev` now has package `dev.system.app` registered. Its `google-services.json` is valid, ignored by Git, and the Firebase-configured Android build passes. Supabase still has no FCM service-account secrets or registered device tokens. |
 | Production milestone | Not yet proven end to end | Live checks show no Supabase Auth users and no registered device tokens. Verify ChatGPT create → Supabase row → push → closed-app widget after owner OAuth linking and server-side FCM configuration. |
@@ -75,7 +75,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 
 ## Critical path and external account steps
 
-The hosted milestone is gated by these remaining owner actions: configure an FCM service account in Supabase, approve the Supabase Auth configuration for the consent origin, and complete ChatGPT Developer mode account linking. Current Vercel project access also needs to be restored if the consent site needs a redeploy.
+The hosted milestone is gated by these remaining steps: update hosted Supabase Auth URL settings, deploy the consent callback change, configure an FCM service account in Supabase, and complete ChatGPT Developer mode account linking. Current Vercel project access returns no project listings, so the callback deployment depends on the existing GitHub integration or restored Vercel access.
 
 ## Definition of done
 
@@ -88,7 +88,7 @@ The hosted milestone is gated by these remaining owner actions: configure an FCM
 
 ## Verification snapshot
 
-Checked on 24 September 2026:
+Checked on 25 September 2026:
 
 - Android `assembleDebug`, `assembleDebugAndroidTest`, `testDebugUnitTest`, and `lintDebug` succeeded both before and after Firebase config was added. The Firebase-configured build ran `processDebugGoogleServices` successfully. `testDebugUnitTest` still reports `NO-SOURCE`.
 - `connectedDebugAndroidTest` passed on the isolated `SYSTEM_CI_QA_20260924` emulator after Firebase configuration: 2 tests, 0 failures, 0 errors. It verifies email sign-in screen/address validation, and that the cached optimistic completion and stable idempotency key survive a Room database close/reopen before successful queue removal.
@@ -103,3 +103,4 @@ Checked on 24 September 2026:
 - Firebase CLI is authenticated and exposes one project, `gdg-web-dev`; Android package `dev.system.app` is registered and the 1,032-byte `google-services.json` validates against its project/app IDs. It is git-ignored. The local Firebase CLI sometimes exits with a Windows Node assertion after completing a request; configuration output was validated independently.
 - The Firebase service-account email/private key are not configured in Supabase, and no Android user/device has signed in to register an FCM token. The ChatGPT OAuth account link is also not yet complete.
 - Vercel’s connected project lookup returned 403 for `system-consent`; local `vercel whoami` still fails to fetch its API. The Brave browser connector reported it could not load browser request-header policy, so no browser session could be inspected.
+- The consent site previously omitted `emailRedirectTo`, allowing Supabase Auth to use its localhost Site URL fallback. The web flow now sets `/auth/callback?next=...`; that route exchanges PKCE/email confirmation codes and rejects external `next` redirects. `npm run lint` and `npm run build` pass, and local callback smoke tests preserve valid consent paths while reducing `//evil.example` to `/`. Hosted Auth configuration and Vercel deployment still need verification.

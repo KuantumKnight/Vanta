@@ -54,7 +54,11 @@ npx vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY production
 npx vercel --prod
 ```
 
-After deployment, open the production origin and verify the SYSTEM sign-in page loads over HTTPS. In Supabase Authentication settings, set the Auth Site URL to that origin, keep the OAuth server enabled with dynamic client registration, and set the authorization URL path to `/oauth/consent`. Keep the OAuth settings enabled and path together when updating them. Add only the redirect URLs required by the ChatGPT OAuth client.
+After deployment, open the production origin and verify the SYSTEM sign-in page loads over HTTPS. For this project, set the Supabase Auth Site URL to `https://system-consent.vercel.app` and add `https://system-consent.vercel.app/auth/callback` to the Auth redirect URL allowlist. Keep existing allowlist entries and add `http://localhost:3000/**` only if local web development is needed. Keep the OAuth server enabled with dynamic client registration and authorization URL path `/oauth/consent`; update the enabled flag and path together.
+
+The consent login explicitly points email links at the same-host `/auth/callback` route. That route exchanges the link code into the server cookie and returns to the original consent request. The values are also recorded in `supabase/config.toml`. When applying the file through the Supabase CLI, run `supabase config diff --project-ref <project-ref>` first and review it before `supabase config push`.
+
+If a sign-in email points to `localhost`, the hosted Auth Site URL or email redirect is still using a development value. Update the hosted URL configuration above. If you customized the email template, keep its link based on `{{ .ConfirmationURL }}` or make sure a custom verification URL uses `{{ .RedirectTo }}` for the final destination.
 
 The consent page shows the requesting OAuth app and requested scopes, then calls Supabase's approve or deny method. It never handles or stores a Supabase secret key.
 
