@@ -4,17 +4,17 @@
 
 | Check | Result | Evidence / next step |
 |---|---|---|
-| Consent-site lint/build | Passed locally | `npm run lint` and `npm run build` pass after changing the login screen to match the hosted magic-link template. The Windows install used Next's WASM compiler fallback; GitHub CI will verify on Linux. |
+| Consent-site lint/build | Passed locally | `npm run lint` and `npm run build` pass with the new code request and code verification routes. Windows used Next's WASM compiler fallback. The hosted email templates still need to include `{{ .Token }}` before code sign-in works against production. |
 | Supabase recurrence tests/type checks | Passed | Same run; five recurrence tests and all four Edge Function checks. |
 | Firebase-configured CI APK | Passed | Same run decoded `SYSTEM_GOOGLE_SERVICES_JSON_B64` and assembled the debug APK. |
-| Firebase-configured Android build | Passed locally | `assembleDebug` ran `processDebugGoogleServices`; installable APK at `artifacts/SYSTEM-debug.apk` (20,442,275 bytes), SHA-256 `D8DFA47226BB73549C72C01089CE0C1BECA7ACFA31A383925841B4846037FA30`. |
+| Firebase-configured Android build | Passed locally | `assembleDebug` ran `processDebugGoogleServices`; installable APK at `artifacts/SYSTEM-debug.apk` (20,442,275 bytes), SHA-256 `353363A3C47B0191B19B723F3B29CA2A5D9E8CF8C0BFF29D7D500581CBB8137C`. |
 | Android lint | Passed | `:app:lintDebug` completed with no lint errors. |
 | Android instrumentation | Passed | `SYSTEM_API_36_PLAY`: 4 tests, 0 failures; sign-in validation, native deep-link registration, offline queue persistence, and widget feed date grouping. |
-| Android cold launch | Passed | Final APK installed and launched to the magic-link sign-in screen; fresh logcat had no ANR or fatal exception. Screenshot: `artifacts/system-signin-magiclink.png`. |
+| Android cold launch | Passed | Final APK launched to the email sign-in screen; fresh logcat had no ANR or fatal exception. |
 | Supabase Android redirect | Passed | Hosted redirect allowlist now contains `dev.system.app://auth`; CLI config diff confirms the URI is live. |
-| Android email-link tap-through | Pending | Needs a fresh email opened from a signed-in Android phone; the emulator has no owner inbox. |
+| Android email sign-in | Pending hosted template change | The app now verifies the live project's 8-digit email code. Update the Magic Link and Confirm signup templates to use `{{ .Token }}`, then verify with a fresh email from the owner inbox. The existing native link callback remains available for older emails. |
 | Anonymous database access | Passed | Anonymous task insert returned 401; SQL privilege checks show `anon` cannot insert tasks or execute `mcp_create_task`. |
-| Live MCP-to-widget flow | Not verified | ChatGPT owner OAuth and email-link tap-through are not complete. There are 0 persisted tasks and 0 registered devices. |
+| Live MCP-to-widget flow | Not verified | ChatGPT owner OAuth and owner email-code sign-in are not complete. There are 0 persisted tasks and 0 registered devices. |
 | Consent production deploy | Not verified | Vercel connector lists 0 projects and cannot access the documented deployment; the Brave control bridge is unavailable and the local CLI's TLS chain is untrusted. |
 | FCM server credentials | Passed | The dedicated service account has only `cloudmessaging.messages.create`; its credentials are Supabase Edge Function secrets, and a short-lived Firebase Messaging OAuth token was minted successfully. The local private-key file was removed. |
 | FCM delivery to Android | Pending | Sign in on the Android phone to register a device token, then verify a closed-app refresh and periodic fallback. |
@@ -30,7 +30,7 @@
 ## Backend and device acceptance
 
 1. **Not run:** Sign in as the account owner through ChatGPT OAuth, call `get_context`, then create “50 push-ups” for its returned `local_date + 1`; verify exactly one task and occurrence in Asia/Kolkata.
-2. **Partially verified:** On 26 September, unauthenticated MCP, `sync-push`, and `send-reminders` requests each returned 401. An anonymous task insert returned 401; SQL ACL checks show `anon` cannot insert tasks or execute `mcp_create_task`. A rolled-back SQL transaction confirmed an alternate JWT subject cannot read the owner’s task through RLS. Cross-owner write attempts using a second real Auth account remain untested.
+2. **Partially verified:** On 26 September, unauthenticated MCP, `sync-push`, and `send-reminders` requests each returned 401. An anonymous task insert returned 401; SQL ACL checks show `anon` cannot insert tasks or execute `mcp_create_task`. Rolled-back SQL tests confirmed an alternate JWT subject cannot read the owner's task and cannot update or complete the owner's tasks, goals, habit schedule, or goal links. The probes used a synthetic second Auth identity and left no rows behind.
 3. **Partially verified:** A rolled-back transaction called `mcp_create_task` twice with one operation ID and identical arguments, confirmed the same result and one occurrence, then confirmed the same ID with changed arguments is rejected. The full ChatGPT transport path remains untested.
 4. **Partially verified:** Room persistence of the offline completion/idempotency key passes instrumentation. Server replay, deduplication, and queue removal after a real successful response remain unverified.
 5. **Partially verified:** Deno tests cover recurrence exceptions and Asia/Kolkata wall-time expansion. A rolled-back live DB test confirmed future schedule edits retire pending future occurrences and preserve completed history. End-to-end schedule materialization remains unverified.

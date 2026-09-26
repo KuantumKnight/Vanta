@@ -19,13 +19,13 @@ class SignInScreenTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun emailSignInValidatesAddressBeforeAllowingMagicLinkRequest() {
+    fun emailSignInValidatesAddressBeforeAllowingCodeRequest() {
         composeRule.onNodeWithText("Continue with email").assertIsDisplayed()
-        composeRule.onNodeWithText("Email me a sign-in link").assertIsNotEnabled()
+        composeRule.onNodeWithText("Email me a sign-in code").assertIsNotEnabled()
 
         composeRule.onNode(hasSetTextAction()).performTextInput("qa@example.com")
 
-        composeRule.onNodeWithText("Email me a sign-in link").assertIsEnabled()
+        composeRule.onNodeWithText("Email me a sign-in code").assertIsEnabled()
     }
 
     @Test

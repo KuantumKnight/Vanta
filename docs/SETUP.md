@@ -56,11 +56,20 @@ npx vercel --prod
 
 After deployment, open the production origin and verify the SYSTEM sign-in page loads over HTTPS. For this project, set the Supabase Auth Site URL to `https://system-consent.vercel.app` and allow `https://system-consent.vercel.app/auth/callback` plus the Android callback `dev.system.app://auth`. Keep the OAuth server enabled with dynamic client registration and authorization URL path `/oauth/consent`; update the enabled flag and path together. Review `supabase config diff` before any hosted config push.
 
-The consent site and Android use Supabase passwordless email links. The consent link returns through `/auth/callback`; the Android link opens the installed app through `dev.system.app://auth`. The app URI is in `supabase/config.toml` and has been added to the hosted Auth redirect allowlist. Open the email on the Android phone and tap the newest link; older emails still use their original redirect.
+The consent site and Android use passwordless email sign-in. The Android app supports the native callback at `dev.system.app://auth` for older links and can also verify an email code on any device. The consent site's `/auth/callback` remains available for OAuth and older confirmation links.
 
-The selected Supabase project currently sends magic links rather than copyable OTP codes. The Android app handles the link directly and does not ask for the email a second time. Leave the hosted Magic Link and Confirm signup templates on their default link behavior. Supabase's free plan with the default email provider blocks hosted template edits; switching these templates to `{{ .Token }}` requires a supported SMTP setup or plan change. That is not needed for this link-based flow.
+The selected hosted project currently uses 8-digit email tokens (`auth.email.otp_length = 8`). To make sign-in use codes, open **Supabase Dashboard → Authentication → Email Templates**. For both **Magic Link** and **Confirm signup**, set the subject to `Your SYSTEM sign-in code` and replace the message body with:
 
-If a new sign-in email still redirects to `localhost`, check that the app requested a fresh email after the hosted redirect allowlist was updated and that the installed build includes the native callback. Do not use an older email link.
+```html
+<h2>Your SYSTEM sign-in code</h2>
+<p>Enter this 8-digit code in SYSTEM:</p>
+<p style="font-size: 28px; font-weight: bold; letter-spacing: 0.2em">{{ .Token }}</p>
+<p>If you did not request this code, you can ignore this email.</p>
+```
+
+Save both templates and remove `{{ .ConfirmationURL }}` from those two bodies. Then request a fresh email from the updated Android build or consent site; older emails still contain one-use links. Hosted email templates are edited in the dashboard or through the Supabase Management API; `supabase config push` does not manage those hosted template bodies.
+
+The current Android and consent builds now show an 8-digit code entry screen. The hosted template update and a real inbox sign-in still need verification.
 
 The consent page shows the requesting OAuth app and requested scopes, then calls Supabase's approve or deny method. It never handles or stores a Supabase secret key.
 

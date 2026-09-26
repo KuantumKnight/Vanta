@@ -11,6 +11,7 @@ import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.FlowType
+import io.github.jan.supabase.auth.OtpType
 import io.github.jan.supabase.auth.handleDeeplinks
 import io.github.jan.supabase.auth.providers.builtin.OTP
 import io.github.jan.supabase.auth.status.SessionStatus
@@ -75,13 +76,21 @@ class SystemRepository(private val context: Context, private val database: Syste
         }
     }
 
+    suspend fun verifyEmailSignInCode(email: String, token: String) {
+        client.auth.verifyEmailOtp(
+            type = OtpType.Email.EMAIL,
+            email = email.trim(),
+            token = token.trim(),
+        )
+    }
+
     fun handleAuthDeeplink(intent: Intent) {
         mutableAuthLinkError.value = null
         client.handleDeeplinks(
             intent = intent,
             onSessionSuccess = { mutableAuthLinkError.value = null },
             onError = {
-                mutableAuthLinkError.value = "This sign-in link couldn’t be verified. Request a fresh link and open it once on this phone."
+                mutableAuthLinkError.value = "This older sign-in link couldn’t be verified. Use the code from a fresh email instead."
             },
         )
     }
