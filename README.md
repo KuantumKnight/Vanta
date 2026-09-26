@@ -6,7 +6,7 @@ SYSTEM is a personal task and habit dashboard for Android, with ChatGPT as the c
 
 - `android/` — Kotlin, Jetpack Compose, Glance widgets, Room cache, sync, and completion queue.
 - `supabase/` — Postgres migrations and Edge Functions for MCP, push refresh, recurrence, and reminders.
-- `web/consent/` — OAuth consent and email-code sign-in site.
+- `web/consent/` — OAuth consent and magic-link sign-in site.
 - `docs/` — deployment and verification steps.
 
 ## Quick start

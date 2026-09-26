@@ -2,6 +2,7 @@ package dev.system.app
 
 import android.os.Build
 import android.os.Bundle
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -127,8 +128,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createReminderChannel()
+        processAuthIntent(intent)
         val app = application as SystemApplication
         setContent { SystemRoot(app, onSignedIn = ::requestNotificationPermissionIfNeeded) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        processAuthIntent(intent)
+    }
+
+    private fun processAuthIntent(intent: Intent) {
+        if (intent.data == null) return
+        lifecycleScope.launch {
+            runCatching { (application as SystemApplication).awaitRepository().handleAuthDeeplink(intent) }
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -324,7 +339,6 @@ private fun LoadingScreen() {
 private fun SignInScreen(repository: SystemRepository) {
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
     var sent by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
@@ -357,7 +371,7 @@ private fun SignInScreen(repository: SystemRepository) {
                 Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
                     Text(if (sent) "Check your inbox" else "Continue with email", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (sent) "Enter the one-time code sent to " + email + "." else "We’ll send a code to create or access your private SYSTEM account.",
+                        if (sent) "Open the sign-in link sent to $email on this phone. It will bring you back to SYSTEM." else "We’ll email you a secure sign-in link for your private SYSTEM account.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 6.dp, bottom = 20.dp),
@@ -380,15 +394,15 @@ private fun SignInScreen(repository: SystemRepository) {
                                 busy = true
                                 message = ""
                                 scope.launch {
-                                    runCatching { repository.requestEmailCode(email) }
-                                        .onSuccess { sent = true; message = "Code sent. It may take a minute to arrive."; messageIsError = false }
-                                        .onFailure { message = "Couldn’t send a code. Check the address and try again."; messageIsError = true }
+                                    runCatching { repository.requestEmailSignIn(email) }
+                                        .onSuccess { sent = true; message = "Sign-in link sent. Open it on this phone to continue."; messageIsError = false }
+                                        .onFailure { message = "Couldn’t send a sign-in link. Check the address and try again."; messageIsError = true }
                                     busy = false
                                 }
                             },
                         ) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            else Text("Send one-time code")
+                            else Text("Email me a sign-in link")
                         }
                         if (!repository.isConfigured) {
                             Text(
@@ -399,50 +413,29 @@ private fun SignInScreen(repository: SystemRepository) {
                             )
                         }
                     } else {
-                        OutlinedTextField(
-                            value = code,
-                            onValueChange = { code = it.filter(Char::isDigit).take(12); message = "" },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("One-time code") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                            singleLine = true,
-                        )
-                        Spacer(Modifier.height(16.dp))
                         Button(
-                            enabled = !busy && code.isNotBlank(),
+                            enabled = !busy,
                             modifier = Modifier.fillMaxWidth().height(52.dp),
                             onClick = {
                                 busy = true
                                 message = ""
                                 scope.launch {
-                                    runCatching { repository.verifyEmailCode(email, code) }
-                                        .onSuccess { message = "Signed in. Loading your tasks…"; messageIsError = false }
-                                        .onFailure { message = "That code expired or wasn’t accepted. Request a new one and try again."; messageIsError = true }
+                                    runCatching { repository.requestEmailSignIn(email) }
+                                        .onSuccess { message = "A fresh sign-in link is on its way."; messageIsError = false }
+                                        .onFailure { message = "Couldn’t resend the link. Check your connection and try again."; messageIsError = true }
                                     busy = false
                                 }
                             },
                         ) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            else Text("Verify and continue")
+                            else Text("Resend sign-in link")
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            TextButton(
-                                enabled = !busy,
-                                onClick = {
-                                    scope.launch {
-                                        busy = true
-                                        runCatching { repository.requestEmailCode(email) }
-                                            .onSuccess { message = "A fresh code is on its way."; messageIsError = false }
-                                            .onFailure { message = "Couldn’t resend the code. Check your connection and try again."; messageIsError = true }
-                                        busy = false
-                                    }
-                                },
-                            ) { Text("Resend code") }
-                            TextButton(enabled = !busy, onClick = { sent = false; code = ""; message = "" }) { Text("Change email") }
+                            TextButton(enabled = !busy, onClick = { sent = false; message = "" }) { Text("Change email") }
                         }
                     }
 

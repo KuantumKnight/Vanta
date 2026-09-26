@@ -1,6 +1,7 @@
 package dev.system.app.data
 
 import android.content.Context
+import android.content.Intent
 import dev.system.app.BuildConfig
 import dev.system.app.widget.SystemWidget
 import androidx.glance.appwidget.updateAll
@@ -9,7 +10,8 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.OtpType
+import io.github.jan.supabase.auth.FlowType
+import io.github.jan.supabase.auth.handleDeeplinks
 import io.github.jan.supabase.auth.providers.builtin.OTP
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.Postgrest
@@ -42,7 +44,11 @@ class SystemRepository(private val context: Context, private val database: Syste
         supabaseUrl = BuildConfig.SUPABASE_URL,
         supabaseKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY,
     ) {
-        install(Auth)
+        install(Auth) {
+            flowType = FlowType.PKCE
+            scheme = AUTH_SCHEME
+            host = AUTH_HOST
+        }
         install(Postgrest)
     }
 
@@ -59,17 +65,15 @@ class SystemRepository(private val context: Context, private val database: Syste
     val isConfigured: Boolean get() = BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank() &&
         BuildConfig.SUPABASE_URL.startsWith("https://") && !BuildConfig.SUPABASE_URL.contains("example.")
 
-    suspend fun requestEmailCode(email: String) {
+    suspend fun requestEmailSignIn(email: String) {
         check(isConfigured) { "Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY to android/local.properties first." }
-        client.auth.signInWith(OTP) {
+        client.auth.signInWith(OTP, redirectUrl = AUTH_REDIRECT_URI) {
             this.email = email.trim()
             createUser = true
         }
     }
 
-    suspend fun verifyEmailCode(email: String, code: String) {
-        client.auth.verifyEmailOtp(type = OtpType.Email.EMAIL, email = email.trim(), token = code.trim())
-    }
+    fun handleAuthDeeplink(intent: Intent) = client.handleDeeplinks(intent)
 
     suspend fun signOut() = syncMutex.withLock {
         if (dao.pendingCompletions().isNotEmpty()) {
@@ -249,6 +253,9 @@ class SystemRepository(private val context: Context, private val database: Syste
     }
 
     companion object {
+        private const val AUTH_SCHEME = "dev.system.app"
+        private const val AUTH_HOST = "auth"
+        private const val AUTH_REDIRECT_URI = "$AUTH_SCHEME://$AUTH_HOST"
         private const val FCM_TOKENS_PREFERENCE = "registered_fcm_tokens"
     }
 }

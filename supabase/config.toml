@@ -12,8 +12,8 @@ major_version = 17
 [auth]
 site_url = "https://system-consent.vercel.app"
 additional_redirect_urls = [
-  "http://localhost:3000/**",
   "https://system-consent.vercel.app/auth/callback",
+  "dev.system.app://auth",
 ]
 
 [auth.oauth_server]

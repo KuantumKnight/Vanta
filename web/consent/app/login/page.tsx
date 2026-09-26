@@ -20,7 +20,7 @@ export default async function LoginPage({
   }
 
   const initialError = params.error === "auth_callback"
-    ? "That sign-in attempt expired or could not be verified. Request a fresh code and enter it here."
+    ? "That sign-in link expired or could not be verified. Request a fresh link and open it from this device."
     : undefined;
   return <LoginForm redirectTo={redirectTo} initialError={initialError} />;
 }

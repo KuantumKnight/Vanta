@@ -1,5 +1,8 @@
 package dev.system.app
 
+import android.content.Intent
+import android.net.Uri
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -7,6 +10,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -15,12 +19,23 @@ class SignInScreenTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun emailSignInValidatesAddressBeforeAllowingCodeRequest() {
+    fun emailSignInValidatesAddressBeforeAllowingMagicLinkRequest() {
         composeRule.onNodeWithText("Continue with email").assertIsDisplayed()
-        composeRule.onNodeWithText("Send one-time code").assertIsNotEnabled()
+        composeRule.onNodeWithText("Email me a sign-in link").assertIsNotEnabled()
 
         composeRule.onNode(hasSetTextAction()).performTextInput("qa@example.com")
 
-        composeRule.onNodeWithText("Send one-time code").assertIsEnabled()
+        composeRule.onNodeWithText("Email me a sign-in link").assertIsEnabled()
+    }
+
+    @Test
+    fun nativeMagicLinkRedirectResolvesToSystem() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val matches = context.packageManager.queryIntentActivities(
+            Intent(Intent.ACTION_VIEW, Uri.parse("dev.system.app://auth")),
+            0,
+        )
+
+        assertTrue(matches.any { it.activityInfo.name == MainActivity::class.java.name })
     }
 }

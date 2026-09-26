@@ -4,16 +4,18 @@
 
 | Check | Result | Evidence / next step |
 |---|---|---|
-| Consent-site lint/build | Passed | GitHub Actions run `36234395884`, commit `3473244`. |
+| Consent-site lint/build | Passed locally | `npm run lint` and `npm run build` pass after changing the login screen to match the hosted magic-link template. The Windows install used Next's WASM compiler fallback; GitHub CI will verify on Linux. |
 | Supabase recurrence tests/type checks | Passed | Same run; five recurrence tests and all four Edge Function checks. |
 | Firebase-configured CI APK | Passed | Same run decoded `SYSTEM_GOOGLE_SERVICES_JSON_B64` and assembled the debug APK. |
-| Firebase-configured Android build | Passed locally | `assembleDebug` ran `processDebugGoogleServices`; installable APK at `artifacts/SYSTEM-debug.apk` (20,442,275 bytes), SHA-256 `D76B545599185C5C886869B1A4B9B2830E1825E727DB7CEBDF214846C21C361E`. |
+| Firebase-configured Android build | Passed locally | `assembleDebug` ran `processDebugGoogleServices`; installable APK at `artifacts/SYSTEM-debug.apk` (20,442,275 bytes), SHA-256 `D8DFA47226BB73549C72C01089CE0C1BECA7ACFA31A383925841B4846037FA30`. |
 | Android lint | Passed | `:app:lintDebug` completed with no lint errors. |
-| Android instrumentation | Passed | `SYSTEM_API_36_PLAY`: 3 tests, 0 failures; sign-in input validation, offline queue persistence, and widget feed date grouping. |
-| Android cold launch | Passed | Final APK installed and launched to the email sign-in screen; fresh logcat had no ANR or fatal exception. Screenshot: `artifacts/system-final-signin.png`. |
+| Android instrumentation | Passed | `SYSTEM_API_36_PLAY`: 4 tests, 0 failures; sign-in validation, native deep-link registration, offline queue persistence, and widget feed date grouping. |
+| Android cold launch | Passed | Final APK installed and launched to the magic-link sign-in screen; fresh logcat had no ANR or fatal exception. Screenshot: `artifacts/system-signin-magiclink.png`. |
+| Supabase Android redirect | Passed | Hosted redirect allowlist now contains `dev.system.app://auth`; CLI config diff confirms the URI is live. |
+| Android email-link tap-through | Pending | Needs a fresh email opened from a signed-in Android phone; the emulator has no owner inbox. |
 | Anonymous database access | Passed | Anonymous task insert returned 401; SQL privilege checks show `anon` cannot insert tasks or execute `mcp_create_task`. |
-| Live MCP-to-widget flow | Not verified | Auth still needs the OTP template update and ChatGPT owner OAuth. There are 0 persisted tasks and 0 registered devices. |
-| Consent production deploy | Not verified | Vercel connector lists 0 projects and deployment listing returns 403; project lookup has an argument-schema mismatch. Local CLI certificate chain is untrusted. |
+| Live MCP-to-widget flow | Not verified | ChatGPT owner OAuth and email-link tap-through are not complete. There are 0 persisted tasks and 0 registered devices. |
+| Consent production deploy | Not verified | Vercel connector lists 0 projects and cannot access the documented deployment; the Brave control bridge is unavailable and the local CLI's TLS chain is untrusted. |
 | FCM server delivery | Sender role configured; credentials pending | FCM API is enabled and the dedicated service account has only `cloudmessaging.messages.create`; Supabase secrets and a registered device token are still missing. |
 | ChatGPT owner OAuth | Not verified | Developer mode account linking is still pending. |
 
