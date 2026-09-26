@@ -29,8 +29,8 @@
 2. **Partially verified:** On 26 September, unauthenticated MCP, `sync-push`, and `send-reminders` requests each returned 401. An anonymous task insert returned 401; SQL ACL checks show `anon` cannot insert tasks or execute `mcp_create_task`. A rolled-back SQL transaction confirmed an alternate JWT subject cannot read the owner’s task through RLS. Cross-owner write attempts using a second real Auth account remain untested.
 3. **Partially verified:** A rolled-back transaction called `mcp_create_task` twice with one operation ID and identical arguments, confirmed the same result and one occurrence, then confirmed the same ID with changed arguments is rejected. The full ChatGPT transport path remains untested.
 4. **Partially verified:** Room persistence of the offline completion/idempotency key passes instrumentation. Server replay, deduplication, and queue removal after a real successful response remain unverified.
-5. **Not run:** Habit exceptions, future schedule edits, and completed-history preservation.
-6. **Not run:** Reminder default timing, late catch-up, and scheduler deduplication.
+5. **Partially verified:** Deno tests cover recurrence exceptions and Asia/Kolkata wall-time expansion. A rolled-back live DB test confirmed future schedule edits retire pending future occurrences and preserve completed history. End-to-end schedule materialization remains unverified.
+6. **Partially verified:** Deno tests cover previous-day 9 AM defaults and late catch-up. A rolled-back live DB test confirmed reminder claims deduplicate before and after marking a send complete. Actual FCM delivery remains unverified.
 7. **Not run:** Closed-app FCM refresh and periodic fallback. FCM credentials/device registration are still missing.
 8. **Not run:** Widget completion while offline, reconnect replay, and retry UI for a rejected server response.
 
