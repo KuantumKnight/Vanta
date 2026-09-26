@@ -371,7 +371,7 @@ private fun SignInScreen(repository: SystemRepository, authLinkError: String?) {
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
             ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
-                    Text(if (sent) "Enter your sign-in code" else "Continue with email", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(if (sent) "Check your email" else "Continue with email", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     if (authLinkError != null) {
                         Text(
                             authLinkError,
@@ -381,7 +381,7 @@ private fun SignInScreen(repository: SystemRepository, authLinkError: String?) {
                         )
                     }
                     Text(
-                        if (sent) "Enter the 8-digit code sent to $email, or open its sign-in link on this phone if the email contains one." else "We’ll email a secure sign-in message. Use its code or open its link on this phone.",
+                        if (sent) "If the email has an 8-digit code, enter it below. If it has a sign-in link, open it on this phone." else "We’ll email a sign-in message. Enter its code if included, or open its link on this phone.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 6.dp, bottom = 20.dp),
@@ -406,14 +406,14 @@ private fun SignInScreen(repository: SystemRepository, authLinkError: String?) {
                                 repository.clearAuthLinkError()
                                 scope.launch {
                                     runCatching { repository.requestEmailSignIn(email) }
-                                        .onSuccess { sent = true; message = "Sign-in email sent. Enter its code or open its link on this phone."; messageIsError = false }
+                                        .onSuccess { sent = true; message = "Sign-in email sent. Enter its code if included, or open its link on this phone."; messageIsError = false }
                                         .onFailure { message = "Couldn’t send a sign-in email. Check the address and try again."; messageIsError = true }
                                     busy = false
                                 }
                             },
                         ) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            else Text("Email me a sign-in code")
+                            else Text("Send sign-in email")
                         }
                         if (!repository.isConfigured) {
                             Text(
@@ -431,7 +431,7 @@ private fun SignInScreen(repository: SystemRepository, authLinkError: String?) {
                                 message = ""
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("8-digit code") },
+                            label = { Text("Email code (if included)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                             singleLine = true,
                         )
@@ -453,7 +453,7 @@ private fun SignInScreen(repository: SystemRepository, authLinkError: String?) {
                             },
                         ) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            else Text("Verify and sign in")
+                            else Text("Continue with code")
                         }
                         Button(
                             enabled = !busy,
@@ -464,14 +464,14 @@ private fun SignInScreen(repository: SystemRepository, authLinkError: String?) {
                                 repository.clearAuthLinkError()
                                 scope.launch {
                                     runCatching { repository.requestEmailSignIn(email) }
-                                        .onSuccess { code = ""; message = "A fresh sign-in code is on its way."; messageIsError = false }
-                                        .onFailure { message = "Couldn’t resend the code. Check your connection and try again."; messageIsError = true }
+                                        .onSuccess { code = ""; message = "A fresh sign-in email is on its way."; messageIsError = false }
+                                        .onFailure { message = "Couldn’t resend the sign-in email. Check your connection and try again."; messageIsError = true }
                                     busy = false
                                 }
                             },
                         ) {
                             if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            else Text("Resend code")
+                            else Text("Resend sign-in email")
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
