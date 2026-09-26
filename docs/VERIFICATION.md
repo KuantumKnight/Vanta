@@ -4,17 +4,16 @@
 
 | Check | Result | Evidence / next step |
 |---|---|---|
-| Consent-site lint/build | Passed | GitHub Actions run `36231694111`, commit `5fd32de`. |
-| Supabase recurrence tests/type checks | Passed | Same GitHub Actions run; five recurrence tests and all four Edge Function checks. |
+| Consent-site lint/build | Passed | GitHub Actions run `36234395884`, commit `3473244`. |
+| Supabase recurrence tests/type checks | Passed | Same run; five recurrence tests and all four Edge Function checks. |
+| Firebase-configured CI APK | Passed | Same run decoded `SYSTEM_GOOGLE_SERVICES_JSON_B64` and assembled the debug APK. |
 | Firebase-configured Android build | Passed locally | `assembleDebug` ran `processDebugGoogleServices`; APK SHA-256 `F9E70B8091A5A965A887C1A4FD75586A7EE1D75477B4DF1D6E43AD0FA5D04FF7`. |
 | Android instrumentation | Passed | `SYSTEM_API_36_PLAY`: 2 tests, 0 failures; sign-in input validation and offline queue persistence. |
 | Android cold launch | Passed | After async startup fix, emulator reached sign-in; fresh logcat had no ANR/fatal exception. |
 | Live task/widget flow | Not verified | One Auth user, 0 tasks, 0 occurrences, 0 enabled devices. |
 | Consent production deploy | Not verified | Vercel connector cannot list the project (0 projects, deployment API 403); local CLI certificate chain is untrusted. |
-| FCM server delivery | Not configured | Firebase Android config exists; service-account secrets and registered device token are still missing. |
+| FCM server delivery | Sender role configured; credentials pending | FCM API is enabled and the dedicated service account has only `cloudmessaging.messages.create`; Supabase secrets and a registered device token are still missing. |
 | ChatGPT owner OAuth | Not verified | Developer mode account linking is still pending. |
-
-The new GitHub workflow also requires a follow-up run after the Firebase config injection change is pushed; the passing run above predates that workflow update.
 
 ## Automated checks
 
