@@ -4,13 +4,13 @@
 
 | Check | Result | Evidence / next step |
 |---|---|---|
-| Consent-site lint/build | Passed locally and in CI | `npm run lint` and `npm run build` pass with the code request and verification routes. Windows used Next's WASM compiler fallback. CI run `36252566677` passed. The Supabase Management API rejects hosted template edits for this free project with the default email provider; code entry requires custom SMTP or an eligible plan, and link fallback remains available meanwhile. |
-| Supabase recurrence tests/type checks | Passed locally and in CI | CI run `36252566677`; five recurrence tests and all four Edge Function checks passed. |
-| Firebase-configured CI APK | Passed | CI run `36252566677` decoded `SYSTEM_GOOGLE_SERVICES_JSON_B64` and assembled the debug APK. |
-| Firebase-configured Android build | Passed locally | `assembleDebug` ran `processDebugGoogleServices`; installable APK at `artifacts/SYSTEM-debug.apk` (20,442,275 bytes), SHA-256 `AB8DE57232ADD51F37AF6893B6781CB12B9122D3AA46E9C598CFA9ADC322B7FB`. |
+| Consent-site lint/build | Passed locally and in CI | `npm run lint` and `npm run build` pass with code/email-link handling. Windows used Next's WASM compiler fallback. CI run `36255318789` passed. Supabase rejects hosted template edits for this free project with the default email provider; email-link fallback works while OTP templates await custom SMTP or an eligible plan. |
+| Supabase recurrence tests/type checks | Passed locally and in CI | CI run `36255318789`; five recurrence tests and all four Edge Function checks passed. |
+| Firebase-configured CI APK | Passed | CI run `36255318789` decoded `SYSTEM_GOOGLE_SERVICES_JSON_B64` and assembled the debug APK. |
+| Firebase-configured Android build | Passed in CI and installed on emulator | `artifacts/SYSTEM-debug.apk` (19,504,524 bytes), SHA-256 `9DB9195BA8230BCE451512308AC8FF52BB7C61FE8CE1FBEF25F642F5734647A5`. It cold-launched to the updated sign-in screen. |
 | Android lint | Passed | `:app:lintDebug` completed with no lint errors. |
 | Android instrumentation | Passed | `SYSTEM_API_36_PLAY`: 4 tests, 0 failures; sign-in validation, native deep-link registration, offline queue persistence, and widget feed date grouping. |
-| Android cold launch | Passed | Final APK launched to the email sign-in screen; fresh logcat had no ANR or fatal exception. |
+| Android cold launch | Passed | Latest CI APK launched to the email sign-in screen; fresh logcat had no ANR or fatal exception. Screenshot: `artifacts/system-signin-final.png`. |
 | Supabase Android redirect | Passed | Hosted redirect allowlist now contains `dev.system.app://auth`; CLI config diff confirms the URI is live. |
 | Android email sign-in | Code and link handling implemented; code-template configuration pending | The app verifies the live project's 8-digit email code and retains the native link callback. Supabase rejected template changes on this free project with its default email provider. Configure custom SMTP or upgrade, update both templates to use `{{ .Token }}`, then verify from the owner inbox. |
 | Anonymous database access | Passed | Anonymous task insert returned 401; SQL privilege checks show `anon` cannot insert tasks or execute `mcp_create_task`. |
