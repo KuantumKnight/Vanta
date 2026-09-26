@@ -16,7 +16,8 @@
 | Anonymous database access | Passed | Anonymous task insert returned 401; SQL privilege checks show `anon` cannot insert tasks or execute `mcp_create_task`. |
 | Live MCP-to-widget flow | Not verified | ChatGPT owner OAuth and email-link tap-through are not complete. There are 0 persisted tasks and 0 registered devices. |
 | Consent production deploy | Not verified | Vercel connector lists 0 projects and cannot access the documented deployment; the Brave control bridge is unavailable and the local CLI's TLS chain is untrusted. |
-| FCM server delivery | Sender role configured; credentials pending | FCM API is enabled and the dedicated service account has only `cloudmessaging.messages.create`; Supabase secrets and a registered device token are still missing. |
+| FCM server credentials | Passed | The dedicated service account has only `cloudmessaging.messages.create`; its credentials are Supabase Edge Function secrets, and a short-lived Firebase Messaging OAuth token was minted successfully. The local private-key file was removed. |
+| FCM delivery to Android | Pending | Sign in on the Android phone to register a device token, then verify a closed-app refresh and periodic fallback. |
 | ChatGPT owner OAuth | Not verified | Developer mode account linking is still pending. |
 
 ## Automated checks
@@ -34,7 +35,7 @@
 4. **Partially verified:** Room persistence of the offline completion/idempotency key passes instrumentation. Server replay, deduplication, and queue removal after a real successful response remain unverified.
 5. **Partially verified:** Deno tests cover recurrence exceptions and Asia/Kolkata wall-time expansion. A rolled-back live DB test confirmed future schedule edits retire pending future occurrences and preserve completed history. End-to-end schedule materialization remains unverified.
 6. **Partially verified:** Deno tests cover previous-day 9 AM defaults and late catch-up. A rolled-back live DB test confirmed reminder claims deduplicate before and after marking a send complete. Actual FCM delivery remains unverified.
-7. **Not run:** Closed-app FCM refresh and periodic fallback. FCM credentials/device registration are still missing.
+7. **Partially verified:** FCM credentials can mint an OAuth token. Closed-app refresh and periodic fallback remain untested because no Android device has registered an FCM token.
 8. **Not run:** Widget completion while offline, reconnect replay, and retry UI for a rejected server response.
 
-The repository excludes Supabase and Firebase credentials. Use the hosted Supabase project for backend acceptance; Docker is only required if you choose to run a local Supabase stack. The Firebase app and ignored `google-services.json` are configured, with the config available to CI through the GitHub secret `SYSTEM_GOOGLE_SERVICES_JSON_B64`. Closed-app push acceptance still needs FCM service-account credentials and a signed-in device with a registered token.
+The repository excludes Supabase and Firebase credentials. Use the hosted Supabase project for backend acceptance; Docker is only required if you choose to run a local Supabase stack. The Firebase app and ignored `google-services.json` are configured, with the config available to CI through the GitHub secret `SYSTEM_GOOGLE_SERVICES_JSON_B64`. The FCM service-account key is held only in Supabase secrets. Closed-app push acceptance still needs a signed-in device with a registered token.
