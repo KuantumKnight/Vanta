@@ -7,8 +7,9 @@
 | Consent-site lint/build | Passed | GitHub Actions run `36234395884`, commit `3473244`. |
 | Supabase recurrence tests/type checks | Passed | Same run; five recurrence tests and all four Edge Function checks. |
 | Firebase-configured CI APK | Passed | Same run decoded `SYSTEM_GOOGLE_SERVICES_JSON_B64` and assembled the debug APK. |
-| Firebase-configured Android build | Passed locally | `assembleDebug` ran `processDebugGoogleServices`; APK SHA-256 `F9E70B8091A5A965A887C1A4FD75586A7EE1D75477B4DF1D6E43AD0FA5D04FF7`. |
-| Android instrumentation | Passed | `SYSTEM_API_36_PLAY`: 2 tests, 0 failures; sign-in input validation and offline queue persistence. |
+| Firebase-configured Android build | Passed locally | `assembleDebug` ran `processDebugGoogleServices`; installable APK at `artifacts/SYSTEM-debug.apk`, SHA-256 `18494ACCE7799D218BE67BA5C7C9F6F9C7AF0660AF2826BAD93B08413A9989D0`. |
+| Android lint | Passed | `:app:lintDebug` completed with no lint errors. |
+| Android instrumentation | Passed | `SYSTEM_API_36_PLAY`: 3 tests, 0 failures; sign-in input validation, offline queue persistence, and widget feed date grouping. |
 | Android cold launch | Passed | After async startup fix, emulator reached sign-in; fresh logcat had no ANR/fatal exception. |
 | Anonymous database access | Passed | Anonymous task insert returned 401; SQL privilege checks show `anon` cannot insert tasks or execute `mcp_create_task`. |
 | Live MCP-to-widget flow | Not verified | Auth still needs the OTP template update and ChatGPT owner OAuth. There are 0 persisted tasks and 0 registered devices. |

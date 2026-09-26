@@ -20,6 +20,8 @@ import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
 import androidx.glance.background
@@ -63,11 +65,7 @@ class SystemWidget : GlanceAppWidget() {
             emptyList()
         }
         val today = LocalDate.now(zone)
-        val sorted = rows.mapNotNull { row ->
-            runCatching { row.scheduledFor?.let { Instant.parse(it).atZone(zone).toLocalDate() to row } }.getOrNull()
-        }.sortedBy { it.first }
-        val urgent = sorted.filter { it.first <= today }.map { it.second }
-        val upcoming = sorted.filter { it.first > today }.map { it.second }
+        val feed = buildWidgetFeed(rows, today)
         val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         val background = ColorProvider(ComposeColor(if (dark) 0xFF151C19 else 0xFFF9FBF9))
         val foreground = ColorProvider(ComposeColor(if (dark) 0xFFE0E5E2 else 0xFF171D1B))
@@ -77,69 +75,58 @@ class SystemWidget : GlanceAppWidget() {
         provideContent {
             val size = LocalSize.current
             val compact = size.height < 150.dp
-            val visibleUrgentLimit = when {
-                compact -> 1
-                size.height < 210.dp -> 1
-                else -> 2
-            }
-            val visibleUpcomingLimit = when {
-                compact && urgent.isEmpty() -> 1
-                compact -> 0
-                size.height < 210.dp -> 2
-                else -> 3
-            }
-            val showSectionHeadings = !compact
-            val shownUrgent = urgent.take(visibleUrgentLimit)
-            val shownUpcoming = upcoming.take(visibleUpcomingLimit)
-
-            Column(
+            LazyColumn(
                 modifier = GlanceModifier.fillMaxSize().background(background).padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = GlanceModifier.defaultWeight().clickable(openApp)) {
-                        Text("SYSTEM", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = accent))
-                        Text(today.format(DateTimeFormatter.ofPattern("EEE, d MMM")), style = TextStyle(fontSize = 12.sp, color = muted))
+                item {
+                    Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = GlanceModifier.defaultWeight().clickable(openApp)) {
+                            Text("SYSTEM", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 17.sp, color = accent))
+                            Text(today.format(DateTimeFormatter.ofPattern("EEE, d MMM")), style = TextStyle(fontSize = 12.sp, color = muted))
+                        }
                     }
                 }
 
-                if (showSectionHeadings && visibleUrgentLimit > 0) {
-                    WidgetSection("TODAY & OVERDUE", foreground)
-                }
-                if (shownUrgent.isEmpty() && showSectionHeadings) {
-                    Text("Nothing due today", style = TextStyle(fontSize = 13.sp, color = muted), modifier = GlanceModifier.padding(vertical = 3.dp))
-                }
-                shownUrgent.forEach { row ->
-                    val date = row.scheduledFor?.let { Instant.parse(it).atZone(zone).toLocalDate() }
-                    val label = when {
-                        date == null -> row.title
-                        date.isBefore(today) -> "Overdue · ${date.format(DateTimeFormatter.ofPattern("d MMM"))} · ${row.title}"
-                        compact -> "Today · ${row.title}"
-                        else -> row.title
+                if (feed.todayAndOverdue.isNotEmpty()) {
+                    if (!compact) item { WidgetSection("TODAY & OVERDUE", foreground) }
+                    items(feed.todayAndOverdue, itemId = { it.occurrence.id.hashCode().toLong() }) { item ->
+                        val label = when {
+                            item.date.isBefore(today) -> "Overdue · ${item.date.format(DateTimeFormatter.ofPattern("d MMM"))} · ${item.occurrence.title}"
+                            compact -> "Today · ${item.occurrence.title}"
+                            else -> item.occurrence.title
+                        }
+                        OccurrenceRow(label, item.occurrence.id, foreground, openApp)
                     }
-                    OccurrenceRow(label, row.id, foreground, openApp)
                 }
 
-                if (showSectionHeadings && visibleUpcomingLimit > 0) {
-                    WidgetSection("UPCOMING", foreground)
-                }
-                shownUpcoming.forEach { row ->
-                    val date = row.scheduledFor?.let { Instant.parse(it).atZone(zone).toLocalDate() } ?: today
-                    val label = if (date == today.plusDays(1)) "Tomorrow" else date.format(DateTimeFormatter.ofPattern("d MMM"))
-                    OccurrenceRow(label + " · " + row.title, row.id, foreground, openApp)
+                if (feed.anytime.isNotEmpty()) {
+                    if (!compact) item { WidgetSection("ANYTIME", foreground) }
+                    items(feed.anytime, itemId = { it.id.hashCode().toLong() }) { row ->
+                        val label = if (compact) "Anytime · ${row.title}" else row.title
+                        OccurrenceRow(label, row.id, foreground, openApp)
+                    }
                 }
 
-                if (urgent.isEmpty() && upcoming.isEmpty()) {
-                    Text(
-                        "Add a task in ChatGPT to see it here.",
-                        style = TextStyle(fontSize = 13.sp, color = muted),
-                        modifier = GlanceModifier.padding(top = 8.dp).clickable(openApp),
-                    )
-                } else if (shownUrgent.size < urgent.size || shownUpcoming.size < upcoming.size) {
-                    Text(
-                        "Open SYSTEM to see all",
-                        style = TextStyle(fontSize = 11.sp, color = accent),
-                        modifier = GlanceModifier.padding(top = 4.dp).clickable(openApp),
-                    )
+                if (feed.upcoming.isNotEmpty()) {
+                    if (!compact) item { WidgetSection("UPCOMING", foreground) }
+                    items(feed.upcoming, itemId = { it.occurrence.id.hashCode().toLong() }) { item ->
+                        val dateLabel = if (item.date == today.plusDays(1)) {
+                            "Tomorrow"
+                        } else {
+                            item.date.format(DateTimeFormatter.ofPattern("d MMM"))
+                        }
+                        OccurrenceRow("$dateLabel · ${item.occurrence.title}", item.occurrence.id, foreground, openApp)
+                    }
+                }
+
+                if (feed.todayAndOverdue.isEmpty() && feed.anytime.isEmpty() && feed.upcoming.isEmpty()) {
+                    item {
+                        Text(
+                            "Add a task in ChatGPT to see it here.",
+                            style = TextStyle(fontSize = 13.sp, color = muted),
+                            modifier = GlanceModifier.padding(top = 8.dp).clickable(openApp),
+                        )
+                    }
                 }
             }
         }
