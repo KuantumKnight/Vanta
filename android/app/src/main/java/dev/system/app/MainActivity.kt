@@ -381,7 +381,7 @@ private fun SignInScreen(repository: SystemRepository, authLinkError: String?) {
                         )
                     }
                     Text(
-                        if (sent) "Enter the 8-digit code sent to $email. You can do this on any device." else "We’ll email an 8-digit sign-in code for your private SYSTEM account.",
+                        if (sent) "Enter the 8-digit code sent to $email, or open its sign-in link on this phone if the email contains one." else "We’ll email a secure sign-in message. Use its code or open its link on this phone.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 6.dp, bottom = 20.dp),
@@ -406,8 +406,8 @@ private fun SignInScreen(repository: SystemRepository, authLinkError: String?) {
                                 repository.clearAuthLinkError()
                                 scope.launch {
                                     runCatching { repository.requestEmailSignIn(email) }
-                                        .onSuccess { sent = true; message = "Sign-in code sent. Enter it below to continue."; messageIsError = false }
-                                        .onFailure { message = "Couldn’t send a sign-in code. Check the address and try again."; messageIsError = true }
+                                        .onSuccess { sent = true; message = "Sign-in email sent. Enter its code or open its link on this phone."; messageIsError = false }
+                                        .onFailure { message = "Couldn’t send a sign-in email. Check the address and try again."; messageIsError = true }
                                     busy = false
                                 }
                             },

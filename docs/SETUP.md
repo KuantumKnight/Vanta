@@ -58,7 +58,7 @@ After deployment, open the production origin and verify the SYSTEM sign-in page 
 
 The consent site and Android use passwordless email sign-in. The Android app supports the native callback at `dev.system.app://auth` for older links and can also verify an email code on any device. The consent site's `/auth/callback` remains available for OAuth and older confirmation links.
 
-The selected hosted project currently uses 8-digit email tokens (`auth.email.otp_length = 8`). To make sign-in use codes, open **Supabase Dashboard → Authentication → Email Templates**. For both **Magic Link** and **Confirm signup**, set the subject to `Your SYSTEM sign-in code` and replace the message body with:
+The selected hosted project uses 8-digit email tokens (`auth.email.otp_length = 8`), but its free-tier project with the default email provider rejects hosted template edits. The Management API returned: “Email template modification is not available for free tier projects using the default email provider.” Configure custom SMTP or upgrade the project before switching the shared email to a code. Then open **Supabase Dashboard → Authentication → Email Templates**. For both **Magic Link** and **Confirm signup**, set the subject to `Your SYSTEM sign-in code` and replace the message body with:
 
 ```html
 <h2>Your SYSTEM sign-in code</h2>
@@ -69,7 +69,7 @@ The selected hosted project currently uses 8-digit email tokens (`auth.email.otp
 
 Save both templates and remove `{{ .ConfirmationURL }}` from those two bodies. Then request a fresh email from the updated Android build or consent site; older emails still contain one-use links. Hosted email templates are edited in the dashboard or through the Supabase Management API; `supabase config push` does not manage those hosted template bodies.
 
-The current Android and consent builds now show an 8-digit code entry screen. The hosted template update and a real inbox sign-in still need verification.
+The Android and consent builds accept an 8-digit code and retain the magic-link callback as a fallback. Until custom SMTP is configured or the project is upgraded and the templates are changed, the default provider continues sending links. A real inbox sign-in still needs verification.
 
 The consent page shows the requesting OAuth app and requested scopes, then calls Supabase's approve or deny method. It never handles or stores a Supabase secret key.
 

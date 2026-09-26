@@ -28,7 +28,7 @@ export default function LoginPage({
       setCode("");
       setSent(true);
     } catch {
-      setError("Could not send the sign-in code. Check your connection and try again.");
+      setError("Could not send the sign-in email. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -69,8 +69,8 @@ export default function LoginPage({
         <p className="eyebrow">PERSONAL COMMAND CENTER</p>
         <h1>{sent ? "Enter your sign-in code" : "Sign in to continue"}</h1>
         <p className="muted">{sent
-          ? <>Enter the 8-digit code sent to <strong>{email}</strong>. You can use it on any device.</>
-          : "Enter your email and we’ll send an 8-digit sign-in code."}</p>
+          ? <>Enter the 8-digit code sent to <strong>{email}</strong>, or open the sign-in link if the email contains one.</>
+          : "Enter your email and we’ll send a secure sign-in email. Use its code or open its link."}</p>
         {!sent ? (
           <form className="form" onSubmit={sendCode}>
             <label htmlFor="email">Email address</label>
