@@ -212,6 +212,7 @@ private fun StartupErrorScreen(onRetry: () -> Unit) {
 private fun SystemScreen(repository: SystemRepository, onSignedIn: () -> Unit) {
     val authenticated by repository.isAuthenticated.collectAsState(initial = null)
     val syncState by repository.syncState.collectAsState()
+    val authLinkError by repository.authLinkError.collectAsState()
     val completionQueue by repository.completionQueue.collectAsState(initial = emptyList())
     val pending by repository.pendingOccurrences.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -260,7 +261,7 @@ private fun SystemScreen(repository: SystemRepository, onSignedIn: () -> Unit) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             when (authenticated) {
                 null -> LoadingScreen()
-                false -> SignInScreen(repository)
+                false -> SignInScreen(repository, authLinkError)
                 true -> Scaffold(
                     topBar = {
                         DashboardTopBar(
@@ -336,7 +337,7 @@ private fun LoadingScreen() {
 }
 
 @Composable
-private fun SignInScreen(repository: SystemRepository) {
+private fun SignInScreen(repository: SystemRepository, authLinkError: String?) {
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
     var sent by remember { mutableStateOf(false) }
@@ -370,6 +371,14 @@ private fun SignInScreen(repository: SystemRepository) {
             ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
                     Text(if (sent) "Check your inbox" else "Continue with email", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    if (authLinkError != null) {
+                        Text(
+                            authLinkError,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                     Text(
                         if (sent) "Open the sign-in link sent to $email on this phone. It will bring you back to SYSTEM." else "We’ll email you a secure sign-in link for your private SYSTEM account.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -380,7 +389,7 @@ private fun SignInScreen(repository: SystemRepository) {
                     if (!sent) {
                         OutlinedTextField(
                             value = email,
-                            onValueChange = { email = it; message = "" },
+                            onValueChange = { email = it; message = ""; repository.clearAuthLinkError() },
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Email address") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
@@ -393,6 +402,7 @@ private fun SignInScreen(repository: SystemRepository) {
                             onClick = {
                                 busy = true
                                 message = ""
+                                repository.clearAuthLinkError()
                                 scope.launch {
                                     runCatching { repository.requestEmailSignIn(email) }
                                         .onSuccess { sent = true; message = "Sign-in link sent. Open it on this phone to continue."; messageIsError = false }
@@ -419,6 +429,7 @@ private fun SignInScreen(repository: SystemRepository) {
                             onClick = {
                                 busy = true
                                 message = ""
+                                repository.clearAuthLinkError()
                                 scope.launch {
                                     runCatching { repository.requestEmailSignIn(email) }
                                         .onSuccess { message = "A fresh sign-in link is on its way."; messageIsError = false }

@@ -40,6 +40,8 @@ class SystemRepository(private val context: Context, private val database: Syste
     private val syncMutex = Mutex()
     private val mutableSyncState = MutableStateFlow(SyncState())
     val syncState = mutableSyncState.asStateFlow()
+    private val mutableAuthLinkError = MutableStateFlow<String?>(null)
+    val authLinkError = mutableAuthLinkError.asStateFlow()
     private val client: SupabaseClient = createSupabaseClient(
         supabaseUrl = BuildConfig.SUPABASE_URL,
         supabaseKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY,
@@ -73,7 +75,20 @@ class SystemRepository(private val context: Context, private val database: Syste
         }
     }
 
-    fun handleAuthDeeplink(intent: Intent) = client.handleDeeplinks(intent)
+    fun handleAuthDeeplink(intent: Intent) {
+        mutableAuthLinkError.value = null
+        client.handleDeeplinks(
+            intent = intent,
+            onSessionSuccess = { mutableAuthLinkError.value = null },
+            onError = {
+                mutableAuthLinkError.value = "This sign-in link couldn’t be verified. Request a fresh link and open it once on this phone."
+            },
+        )
+    }
+
+    fun clearAuthLinkError() {
+        mutableAuthLinkError.value = null
+    }
 
     suspend fun signOut() = syncMutex.withLock {
         if (dao.pendingCompletions().isNotEmpty()) {
