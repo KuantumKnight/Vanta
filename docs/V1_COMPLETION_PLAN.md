@@ -1,6 +1,6 @@
 # SYSTEM V1 completion plan
 
-Updated: 25 September 2026
+Updated: 26 September 2026
 
 This plan tracks the shortest dependable path from the current repository to a polished, working SYSTEM V1. Supabase remains the authority for task data. Room is a cache; ChatGPT is the task command center; Android is the review and completion surface.
 
@@ -8,12 +8,12 @@ This plan tracks the shortest dependable path from the current repository to a p
 
 | Area | Status | Evidence / remaining condition |
 |---|---|---|
-| Supabase schema and server functions | Deployed | Seven migrations and four Edge Functions are live on the selected project. RLS and anonymous RPC rejection were checked. Re-run the security review after any schema change. |
-| MCP tools and OAuth server | Deployed; public discovery verified; owner link pending | An unauthenticated MCP initialize returns 401 with OAuth metadata, and the Supabase authorization-server metadata endpoint returns 200. ChatGPT Developer mode still needs to connect and finish the owner OAuth flow. |
-| Consent and email-code site | Redirect fix implemented; hosted deployment and Auth settings need verification | The login now supplies an explicit same-host callback and the callback exchanges email links into SSR cookies. `npm run lint` and `npm run build` pass locally. Production URL: [system-consent.vercel.app](https://system-consent.vercel.app). Vercel API access still returns no accessible projects; Supabase Auth Site URL and redirect allowlist must be updated to remove the localhost fallback. |
-| Android dashboard and widget | Implemented; build, lint, sign-in smoke test, and offline-queue test pass | Compose views, Room cache, Glance widget, completion queue, and WorkManager sync are present. QA instrumentation verifies the email sign-in screen and address validation, plus persistence of optimistic completion and its idempotency key across database reopen. Signed-in/device sync remains unverified. |
-| Firebase push refresh | Android project configured; server credential pending | Firebase project `gdg-web-dev` now has package `dev.system.app` registered. Its `google-services.json` is valid, ignored by Git, and the Firebase-configured Android build passes. Supabase still has no FCM service-account secrets or registered device tokens. |
-| Production milestone | Not yet proven end to end | Live checks show no Supabase Auth users and no registered device tokens. Verify ChatGPT create → Supabase row → push → closed-app widget after owner OAuth linking and server-side FCM configuration. |
+| Supabase schema and server functions | Deployed; live acceptance still needed | Seven migrations and four Edge Functions are active on `zpxcilhmbbhowqceyafj`. The live database has one Auth user and no tasks, occurrences, enabled device tokens, or sent reminders. Security Advisor reports ten authenticated `SECURITY DEFINER` RPC warnings and leaked-password protection disabled; verify user-bound RPC guards and the Auth setting before release. |
+| MCP tools and OAuth server | Deployed; owner link pending | The live `mcp` function is version 3 and uses Supabase's authenticated-user OAuth integration. ChatGPT Developer mode still needs to connect and finish the owner OAuth flow. |
+| Consent and email-code site | Callback and OTP UI implemented; hosted deployment/Auth settings pending | Commit `d7095b6` contains the same-host callback and code-first sign-in flow. CI lint/build passed. Vercel currently lists no accessible projects; deployment listing returns 403, the deploy connector reports its tool missing, and the CLI's TLS chain is untrusted. Supabase Auth email templates and redirect settings remain unverified. |
+| Android dashboard and widget | Implemented; startup regression fixed and emulator checks pass | Commit `5fd32de` moves Room/Supabase construction off the main thread. A Firebase-configured debug build and both instrumentation tests passed. The app cold-launches to sign-in without an ANR. Authenticated dashboard, widget task rendering, and server-backed offline replay still need end-to-end verification. |
+| Firebase push refresh | Android config wired; server credential pending | Firebase project `gdg-web-dev` has app `dev.system.app`; `google-services.json` is ignored locally and its encoded config is in GitHub secret `SYSTEM_GOOGLE_SERVICES_JSON_B64`. Supabase FCM service-account secrets and a registered device token are still missing. |
+| Production milestone | Not yet proven end to end | One Supabase Auth user exists, but there are no tasks or registered devices. Verify ChatGPT create → Supabase row → FCM refresh → closed-app widget after owner OAuth linking and server-side FCM configuration. |
 
 ## Build sequence
 
@@ -47,7 +47,7 @@ This plan tracks the shortest dependable path from the current repository to a p
 
 ### 4. Configure Firebase push refresh
 
-- Firebase CLI sign-in, project selection (`gdg-web-dev`), Android app registration, and local `google-services.json` setup are complete.
+- Firebase CLI sign-in and project access to `gdg-web-dev` are verified; its Android app is registered. Local `google-services.json` is ignored, and CI retrieves it from `SYSTEM_GOOGLE_SERVICES_JSON_B64`.
 - Enable Cloud Messaging; create or select a service account with the required messaging permission.
 - Set `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, and `FCM_PRIVATE_KEY` as Supabase Edge Function secrets. Never put the private key in Android, Vercel, Git, or chat.
 - Rebuild and install the Firebase-configured APK; sign in, grant notifications, and verify the app registers an enabled device token.
@@ -88,19 +88,19 @@ The hosted milestone is gated by these remaining steps: update hosted Supabase A
 
 ## Verification snapshot
 
-Checked on 25 September 2026:
+Checked on 26 September 2026:
 
-- Android `assembleDebug`, `assembleDebugAndroidTest`, `testDebugUnitTest`, and `lintDebug` succeeded both before and after Firebase config was added. The Firebase-configured build ran `processDebugGoogleServices` successfully. `testDebugUnitTest` still reports `NO-SOURCE`.
-- `connectedDebugAndroidTest` passed on the isolated `SYSTEM_CI_QA_20260924` emulator after Firebase configuration: 2 tests, 0 failures, 0 errors. It verifies email sign-in screen/address validation, and that the cached optimistic completion and stable idempotency key survive a Room database close/reopen before successful queue removal.
-- Current Firebase-configured debug APK: `android/app/build/outputs/apk/debug/app-debug.apk` (20,442,275 bytes; SHA-256 `DD79488966C65E0D31CFCF5B5CF9110860C763E4C7FDC37564F389E8B60B3849`).
+- Android `assembleDebug`, `assembleDebugAndroidTest`, and `connectedDebugAndroidTest` succeeded after the startup fix with Firebase config present. `connectedDebugAndroidTest` ran on `SYSTEM_API_36_PLAY`: 2 tests, 0 failures, 0 errors. It verifies sign-in address validation and persistence of the optimistic completion/idempotency key across a Room reopen. Run `lintDebug` again before release.
+- The startup trace showed Supabase client construction blocking `Application.onCreate`. After moving initialization to `Dispatchers.IO`, the installed app cold-launched to sign-in; fresh logcat had no ANR or fatal exception. Screenshot: `artifacts/system-debug-apk-36231694111/system-startup.png`.
+- Current Firebase-configured debug APK: `android/app/build/outputs/apk/debug/app-debug.apk` (20,442,275 bytes; SHA-256 `F9E70B8091A5A965A887C1A4FD75586A7EE1D75477B4DF1D6E43AD0FA5D04FF7`).
 - Android lint still reports 10 non-blocking warnings, mainly newer suggested dependency versions, target SDK 36, deprecated Android/Firebase calls, backup rules, and the launcher icon's missing monochrome layer.
 - Deno recurrence tests passed 5/5, and the documented `deno check --config supabase/deno.json` command passed for all four Edge Functions.
 - The clean QA emulator displayed sign-in in light and dark mode, including 360 dp width with 1.3 font scaling. Signed-in screens and the widget data flow remain unverified on a device.
-- Consent-site lint/build and the Vercel production deployment passed earlier in this work; the consent site has not changed since.
-- Live hosted checks: Supabase project is `ACTIVE_HEALTHY`; all four Edge Functions are active; the recurrence and reminder cron jobs are enabled. Unauthenticated MCP `initialize` returns 401, the protected-resource metadata returns 200, and the Auth OAuth-server metadata returns 200. The database currently has 0 auth users and 0 registered push devices.
+- Consent-site lint/build and Edge Function tests/type checks passed in GitHub workflow `36231694111` for commit `5fd32de5998e1bbd13370c3189478c085cadcf9e`. That workflow predates Firebase secret injection, so rerun it after the workflow update is pushed.
+- Live hosted checks: Supabase is `ACTIVE_HEALTHY`; all four Edge Functions are active; recurrence/reminder jobs were previously verified enabled. Recheck unauthenticated MCP/internal endpoint 401s before release. The database has 1 Auth user, 0 tasks, 0 occurrences, 0 enabled devices, and 0 sent reminders.
 - The Supabase URL and publishable key in both ignored local configuration files (`android/local.properties` and `web/consent/.env.local`) match the selected hosted project. Values were compared without printing the key.
-- The Vercel deployment URL is documented from an earlier successful deployment, but current live verification is blocked: the Vercel connector shows no project for its linked team, and the local HTTPS client reports `UntrustedRoot`. Certificate validation was not bypassed.
-- Firebase CLI is authenticated and exposes one project, `gdg-web-dev`; Android package `dev.system.app` is registered and the 1,032-byte `google-services.json` validates against its project/app IDs. It is git-ignored. The local Firebase CLI sometimes exits with a Windows Node assertion after completing a request; configuration output was validated independently.
+- The Vercel deployment URL is documented from an earlier deployment, but current live verification is blocked: the connector lists no projects for its team and returns 403 for deployments; the deploy tool is unavailable. The local Vercel CLI sees an untrusted TLS chain. TLS validation was not bypassed.
+- Firebase CLI 15.31.0 is authenticated and exposes `gdg-web-dev`; Android package `dev.system.app` is registered and the local `google-services.json` validates against its project/app IDs. The file is git-ignored and CI retrieves it from `SYSTEM_GOOGLE_SERVICES_JSON_B64`.
 - The Firebase service-account email/private key are not configured in Supabase, and no Android user/device has signed in to register an FCM token. The ChatGPT OAuth account link is also not yet complete.
 - Vercel’s connected project lookup returned 403 for `system-consent`; local `vercel whoami` still fails to fetch its API. The Brave browser connector reported it could not load browser request-header policy, so no browser session could be inspected.
 - The consent site previously omitted `emailRedirectTo`, allowing Supabase Auth to use its localhost Site URL fallback. The web flow now sets `/auth/callback?next=...`; that route exchanges PKCE/email confirmation codes and rejects external `next` redirects. `npm run lint` and `npm run build` pass, and local callback smoke tests preserve valid consent paths while reducing `//evil.example` to `/`. Hosted Auth configuration and Vercel deployment still need verification.

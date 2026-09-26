@@ -54,6 +54,17 @@ jobs:
       - uses: android-actions/setup-android@v4
         with:
           packages: "platforms;android-37.0 build-tools;37.0.0"
+      - name: Configure Firebase Android app
+        working-directory: android
+        env:
+          GOOGLE_SERVICES_JSON_B64: ${{ secrets.SYSTEM_GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_B64" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 --decode > app/google-services.json
+          elif [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "::error::Configure SYSTEM_GOOGLE_SERVICES_JSON_B64 to build the Firebase-enabled APK."
+            exit 1
+          fi
       - name: Assemble debug APK
         working-directory: android
         env:
