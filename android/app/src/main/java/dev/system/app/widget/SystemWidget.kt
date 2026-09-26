@@ -3,6 +3,7 @@ package dev.system.app.widget
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.unit.dp
@@ -61,11 +62,12 @@ class SystemWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val rows = try {
             (context.applicationContext as SystemApplication).awaitDatabase().systemDao().pendingSnapshot()
-        } catch (_: Throwable) {
-            emptyList()
+        } catch (error: Exception) {
+            Log.e("SystemWidget", "Could not read the local task cache", error)
+            null
         }
         val today = LocalDate.now(zone)
-        val feed = buildWidgetFeed(rows, today)
+        val feed = rows?.let { buildWidgetFeed(it, today) }
         val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         val background = ColorProvider(ComposeColor(if (dark) 0xFF151C19 else 0xFFF9FBF9))
         val foreground = ColorProvider(ComposeColor(if (dark) 0xFFE0E5E2 else 0xFF171D1B))
@@ -87,45 +89,55 @@ class SystemWidget : GlanceAppWidget() {
                     }
                 }
 
-                if (feed.todayAndOverdue.isNotEmpty()) {
-                    if (!compact) item { WidgetSection("TODAY & OVERDUE", foreground) }
-                    items(feed.todayAndOverdue, itemId = { it.occurrence.id.hashCode().toLong() }) { item ->
-                        val label = when {
-                            item.date.isBefore(today) -> "Overdue · ${item.date.format(DateTimeFormatter.ofPattern("d MMM"))} · ${item.occurrence.title}"
-                            compact -> "Today · ${item.occurrence.title}"
-                            else -> item.occurrence.title
-                        }
-                        OccurrenceRow(label, item.occurrence.id, foreground, openApp)
-                    }
-                }
-
-                if (feed.anytime.isNotEmpty()) {
-                    if (!compact) item { WidgetSection("ANYTIME", foreground) }
-                    items(feed.anytime, itemId = { it.id.hashCode().toLong() }) { row ->
-                        val label = if (compact) "Anytime · ${row.title}" else row.title
-                        OccurrenceRow(label, row.id, foreground, openApp)
-                    }
-                }
-
-                if (feed.upcoming.isNotEmpty()) {
-                    if (!compact) item { WidgetSection("UPCOMING", foreground) }
-                    items(feed.upcoming, itemId = { it.occurrence.id.hashCode().toLong() }) { item ->
-                        val dateLabel = if (item.date == today.plusDays(1)) {
-                            "Tomorrow"
-                        } else {
-                            item.date.format(DateTimeFormatter.ofPattern("d MMM"))
-                        }
-                        OccurrenceRow("$dateLabel · ${item.occurrence.title}", item.occurrence.id, foreground, openApp)
-                    }
-                }
-
-                if (feed.todayAndOverdue.isEmpty() && feed.anytime.isEmpty() && feed.upcoming.isEmpty()) {
+                if (feed == null) {
                     item {
                         Text(
-                            "Add a task in ChatGPT to see it here.",
+                            "Couldn't load tasks. Open SYSTEM to retry.",
                             style = TextStyle(fontSize = 13.sp, color = muted),
                             modifier = GlanceModifier.padding(top = 8.dp).clickable(openApp),
                         )
+                    }
+                } else {
+                    if (feed.todayAndOverdue.isNotEmpty()) {
+                        if (!compact) item { WidgetSection("TODAY & OVERDUE", foreground) }
+                        items(feed.todayAndOverdue, itemId = { it.occurrence.id.hashCode().toLong() }) { item ->
+                            val label = when {
+                                item.date.isBefore(today) -> "Overdue · ${item.date.format(DateTimeFormatter.ofPattern("d MMM"))} · ${item.occurrence.title}"
+                                compact -> "Today · ${item.occurrence.title}"
+                                else -> item.occurrence.title
+                            }
+                            OccurrenceRow(label, item.occurrence.id, foreground, openApp)
+                        }
+                    }
+
+                    if (feed.anytime.isNotEmpty()) {
+                        if (!compact) item { WidgetSection("ANYTIME", foreground) }
+                        items(feed.anytime, itemId = { it.id.hashCode().toLong() }) { row ->
+                            val label = if (compact) "Anytime · ${row.title}" else row.title
+                            OccurrenceRow(label, row.id, foreground, openApp)
+                        }
+                    }
+
+                    if (feed.upcoming.isNotEmpty()) {
+                        if (!compact) item { WidgetSection("UPCOMING", foreground) }
+                        items(feed.upcoming, itemId = { it.occurrence.id.hashCode().toLong() }) { item ->
+                            val dateLabel = if (item.date == today.plusDays(1)) {
+                                "Tomorrow"
+                            } else {
+                                item.date.format(DateTimeFormatter.ofPattern("d MMM"))
+                            }
+                            OccurrenceRow("$dateLabel · ${item.occurrence.title}", item.occurrence.id, foreground, openApp)
+                        }
+                    }
+
+                    if (feed.todayAndOverdue.isEmpty() && feed.anytime.isEmpty() && feed.upcoming.isEmpty()) {
+                        item {
+                            Text(
+                                "Add a task in ChatGPT to see it here.",
+                                style = TextStyle(fontSize = 13.sp, color = muted),
+                                modifier = GlanceModifier.padding(top = 8.dp).clickable(openApp),
+                            )
+                        }
                     }
                 }
             }

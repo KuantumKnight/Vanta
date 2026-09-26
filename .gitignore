@@ -17,6 +17,7 @@ web/consent/*.tsbuildinfo
 web/consent/out/
 web/consent/.env.local
 .vercel/
+artifacts/
 supabase/.temp/
 supabase/.env
 *.jks
