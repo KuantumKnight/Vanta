@@ -1,0 +1,46 @@
+name: Deploy SYSTEM consent to Vercel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy consent site
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/consent
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/consent/package-lock.json
+      - name: Check deployment credentials
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Add the VERCEL_TOKEN repository Actions secret before running this workflow."
+            exit 1
+          fi
+          if [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::error::Set VERCEL_ORG_ID and VERCEL_PROJECT_ID repository Actions variables."
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm run lint
+      - name: Install Vercel CLI
+        run: npm install --global vercel@59.1.4
+      - name: Pull production project settings
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: Build production deployment
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+      - name: Deploy production build
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
