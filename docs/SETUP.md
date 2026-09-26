@@ -4,7 +4,7 @@
 
 - Supabase Postgres is the source of truth. Android Room is an offline cache.
 - The Supabase Edge Functions provide the ChatGPT MCP endpoint, sync pushes, recurring occurrence generation, and reminders.
-- `web/consent` is the HTTPS OAuth consent and email-code sign-in site.
+- `web/consent` is the HTTPS OAuth consent and passwordless email sign-in site.
 - Android uses Kotlin, Compose, Room, Glance, WorkManager, and Firebase Cloud Messaging.
 
 Docker is optional. It is only needed to run a local Supabase stack; app development and a hosted Supabase project do not require it.
@@ -56,9 +56,11 @@ npx vercel --prod
 
 After deployment, open the production origin and verify the SYSTEM sign-in page loads over HTTPS. For this project, set the Supabase Auth Site URL to `https://system-consent.vercel.app` and add `https://system-consent.vercel.app/auth/callback` to the Auth redirect URL allowlist. Keep existing allowlist entries and add `http://localhost:3000/**` only if local web development is needed. Keep the OAuth server enabled with dynamic client registration and authorization URL path `/oauth/consent`; update the enabled flag and path together.
 
-The consent login explicitly points email links at the same-host `/auth/callback` route. That route exchanges the link code into the server cookie and returns to the original consent request. The values are also recorded in `supabase/config.toml`. When applying the file through the Supabase CLI, run `supabase config diff --project-ref <project-ref>` first and review it before `supabase config push`.
+The consent login explicitly points email sign-in at the same-host `/auth/callback` route. Supabase's default Magic Link template sends a link; the login page supports either that link or a one-time code. After a successful sign-in with no OAuth request, the site shows an account-ready page instead of returning to the email form. The values are also recorded in `supabase/config.toml`. When applying the file through the Supabase CLI, run `supabase config diff --project-ref <project-ref>` first and review it before `supabase config push`.
 
-If a sign-in email points to `localhost`, the hosted Auth Site URL or email redirect is still using a development value. Update the hosted URL configuration above. If you customized the email template, keep its link based on `{{ .ConfirmationURL }}` or make sure a custom verification URL uses `{{ .RedirectTo }}` for the final destination.
+If you want the email to contain a six-digit code as well as a link, edit both **Auth > Email Templates > Magic Link** and **Confirm signup** to include `{{ .Token }}`. Keep the link based on `{{ .ConfirmationURL }}`. Supabase chooses link versus code based on the template; `signInWithOtp` alone sends a link by default.
+
+If a sign-in email's final destination points to `localhost`, the hosted Auth Site URL or email redirect is still using a development value. Update the hosted URL configuration above. If you customized the email template, keep its link based on `{{ .ConfirmationURL }}` or make sure a custom verification URL uses `{{ .RedirectTo }}` for the final destination.
 
 The consent page shows the requesting OAuth app and requested scopes, then calls Supabase's approve or deny method. It never handles or stores a Supabase secret key.
 
