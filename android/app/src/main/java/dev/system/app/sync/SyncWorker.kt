@@ -20,7 +20,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork() = withContext(Dispatchers.IO) {
         val app = applicationContext as SystemApplication
         try {
-            app.repository.syncNow()
+            app.awaitRepository().syncNow()
             Result.success()
         } catch (error: Throwable) {
             Result.retry()

@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         createReminderChannel()
         val app = application as SystemApplication
-        setContent { SystemScreen(app.repository, onSignedIn = ::requestNotificationPermissionIfNeeded) }
+        setContent { SystemRoot(app, onSignedIn = ::requestNotificationPermissionIfNeeded) }
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -144,8 +144,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        val repo = (application as SystemApplication).repository
-        if (repo.currentUser != null) lifecycleScope.launch { runCatching { repo.syncNow() } }
+        val repo = (application as SystemApplication).repositoryOrNull
+        if (repo?.currentUser != null) lifecycleScope.launch { runCatching { repo.syncNow() } }
     }
 
     private fun createReminderChannel() {
@@ -157,6 +157,39 @@ class MainActivity : ComponentActivity() {
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun SystemRoot(app: SystemApplication, onSignedIn: () -> Unit) {
+    val startup by app.startup.collectAsState()
+    val colors = if (androidx.compose.foundation.isSystemInDarkTheme()) SystemDarkColors else SystemLightColors
+    MaterialTheme(colorScheme = colors) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            when (val state = startup) {
+                StartupState.Initializing -> LoadingScreen()
+                is StartupState.Ready -> SystemScreen(state.repository, onSignedIn)
+                is StartupState.Failed -> StartupErrorScreen(onRetry = app::initialize)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StartupErrorScreen(onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("SYSTEM couldn’t start", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Your saved tasks are safe. Try opening SYSTEM again.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Button(onClick = onRetry, modifier = Modifier.padding(top = 16.dp).height(48.dp)) { Text("Try again") }
     }
 }
 

@@ -58,7 +58,7 @@ class SystemWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val rows = try {
-            (context.applicationContext as SystemApplication).database.systemDao().pendingSnapshot()
+            (context.applicationContext as SystemApplication).awaitDatabase().systemDao().pendingSnapshot()
         } catch (_: Throwable) {
             emptyList()
         }
@@ -178,7 +178,7 @@ class CompleteOccurrenceAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val occurrenceId = parameters[occurrenceKey] ?: return
         val app = context.applicationContext as SystemApplication
-        app.repository.queueCompletion(occurrenceId)
+        app.awaitRepository().queueCompletion(occurrenceId)
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
