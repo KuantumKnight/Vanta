@@ -47,6 +47,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Free runner disk space for Android emulator
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
+        with:
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          preinstalled-runtimes: false
+          swap-storage: false
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -111,12 +121,8 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
-          disk-size: 4G
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          pre-emulator-launch-script: |
-            sed -i '/^disk.dataPartition.size=/d' "$ANDROID_AVD_HOME/test.avd/config.ini"
-            printf 'disk.dataPartition.size=4G\n' >> "$ANDROID_AVD_HOME/test.avd/config.ini"
           script: cd android && bash ./gradlew --no-daemon connectedDebugAndroidTest
       - uses: actions/upload-artifact@v7
         with:
