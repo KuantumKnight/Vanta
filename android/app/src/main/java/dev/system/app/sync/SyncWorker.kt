@@ -8,13 +8,10 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.Constraints
 import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.workDataOf
 import dev.system.app.SystemApplication
-import dev.system.app.widget.SystemWidget
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork() = withContext(Dispatchers.IO) {
@@ -22,7 +19,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         try {
             app.awaitRepository().syncNow()
             Result.success()
-        } catch (error: Throwable) {
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
             Result.retry()
         }
     }

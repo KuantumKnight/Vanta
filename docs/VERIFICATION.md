@@ -1,5 +1,29 @@
 # Verification checklist
 
+## Source audit changes — 21 October 2026
+
+The following source changes are not yet deployed to the hosted Supabase project. Apply the four new migrations before treating these backend checks as passed. Android build and instrumentation verification is recorded below.
+
+- Verify authenticated clients cannot insert task occurrences directly, while `complete_task_occurrence` still succeeds with an owner token.
+- Verify an FCM token registered under a second signed-in account transfers to that account, and the old account no longer reads it.
+- Verify the `system-consent` bucket is private and the anonymous `probe.html` object is absent.
+- Verify task and occurrence mutations still commit when the Vault refresh secret is absent, and a multi-row insert queues at most one refresh per owner for the statement.
+- Verify Android cache queries return only the active user, paginate beyond 1,000 pending rows, preserve the queued optimistic row during an atomic snapshot, and replay only that user's queue.
+- Verify `list_tasks` pages with `offset`, and `include_completed=true` omits skipped habit occurrences.
+- Verify the Vercel production workflow skips dispatches from branches other than `main`.
+
+## Audit verification — 21 October 2026
+
+| Check | Result | Evidence / next step |
+|---|---|---|
+| Android build and instrumentation | Passed | Forced fresh build; `connectedDebugAndroidTest --rerun-tasks`: 7 tests, 0 failures on `SYSTEM_CI_QA_FINAL` API 36. Covers sign-in validation and deep link, Room user isolation and snapshot replacement, v1→v3 migration with legacy rows remaining unowned, required task projection fields, and widget feed grouping. |
+| Consent app lint/build | Passed | `npm run lint` and `npm run build` passed after the source audit changes. |
+| Edge Function tests/type checks | Passed | Five recurrence tests and `deno check` for MCP, schedule expansion, push refresh, and reminders passed after the source changes. |
+| SQL migration execution | Not run | Docker Desktop's Linux engine was unavailable. Review the migration SQL, then apply and verify in a disposable local Supabase project or the hosted project using the checks above. |
+| Hosted migration and core-flow acceptance | Pending | No Supabase migration or Vercel deployment was made during this audit. Verify migrations, ChatGPT OAuth, Android sign-in, FCM refresh, and widget convergence in the hosted environment. |
+
+The Android build emitted existing deprecation warnings for system bar properties, Firebase token access, and the messaging callback. They did not fail compilation.
+
 ## Current results — 26 September 2026
 
 | Check | Result | Evidence / next step |
@@ -30,7 +54,7 @@
 ## Backend and device acceptance
 
 1. **Not run:** Sign in as the account owner through ChatGPT OAuth, call `get_context`, then create “50 push-ups” for its returned `local_date + 1`; verify exactly one task and occurrence in Asia/Kolkata.
-2. **Partially verified:** On 26 September, unauthenticated MCP, `sync-push`, and `send-reminders` requests each returned 401. An anonymous task insert returned 401; SQL ACL checks show `anon` cannot insert tasks or execute `mcp_create_task`. Rolled-back SQL tests confirmed an alternate JWT subject cannot read the owner's task and cannot update or complete the owner's tasks, goals, habit schedule, or goal links. The probes used a synthetic second Auth identity and left no rows behind.
+2. **Partially verified:** On 26 September, unauthenticated MCP, `sync-push`, and `send-reminders` requests each returned 401. An anonymous task insert returned 401; SQL ACL checks show `anon` cannot insert tasks or execute `mcp_create_task`. Rolled-back SQL tests confirmed an alternate JWT subject cannot read the owner's task and cannot update or complete the owner's tasks, goals, habit schedule, or goal links. The new occurrence-insert denial and device-token transfer migration still need hosted verification.
 3. **Partially verified:** A rolled-back transaction called `mcp_create_task` twice with one operation ID and identical arguments, confirmed the same result and one occurrence, then confirmed the same ID with changed arguments is rejected. The full ChatGPT transport path remains untested.
 4. **Partially verified:** Room persistence of the offline completion/idempotency key passes instrumentation. Server replay, deduplication, and queue removal after a real successful response remain unverified.
 5. **Partially verified:** Deno tests cover recurrence exceptions and Asia/Kolkata wall-time expansion. A rolled-back live DB test confirmed future schedule edits retire pending future occurrences and preserve completed history. End-to-end schedule materialization remains unverified.

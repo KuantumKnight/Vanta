@@ -20,9 +20,13 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.query.Columns
-import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -36,6 +40,10 @@ import kotlinx.coroutines.tasks.await
 import java.time.Instant
 import java.util.UUID
 
+internal const val OCCURRENCE_SELECT =
+    "id,task_id,scheduled_for,all_day,status,completed_at,task:tasks!inner(title,notes,kind,archived_at)"
+
+@OptIn(ExperimentalCoroutinesApi::class)
 class SystemRepository(private val context: Context, private val database: SystemDatabase) {
     private val dao = database.systemDao()
     private val syncMutex = Mutex()
@@ -63,8 +71,15 @@ class SystemRepository(private val context: Context, private val database: Syste
             is SessionStatus.NotAuthenticated, is SessionStatus.RefreshFailure -> false
         }
     }
-    val pendingOccurrences: Flow<List<CachedOccurrence>> get() = dao.observePending()
-    val completionQueue: Flow<List<PendingCompletion>> get() = dao.observeCompletionQueue()
+    private val activeUserId = client.auth.sessionStatus.map { status ->
+        if (status is SessionStatus.Authenticated) currentUser?.id else null
+    }.distinctUntilChanged()
+    val pendingOccurrences: Flow<List<CachedOccurrence>> = activeUserId.flatMapLatest { userId ->
+        if (userId == null) flowOf(emptyList()) else dao.observePending(userId)
+    }
+    val completionQueue: Flow<List<PendingCompletion>> = activeUserId.flatMapLatest { userId ->
+        if (userId == null) flowOf(emptyList()) else dao.observeCompletionQueue(userId)
+    }
     val isConfigured: Boolean get() = BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank() &&
         BuildConfig.SUPABASE_URL.startsWith("https://") && !BuildConfig.SUPABASE_URL.contains("example.")
 
@@ -100,37 +115,43 @@ class SystemRepository(private val context: Context, private val database: Syste
     }
 
     suspend fun signOut() = syncMutex.withLock {
-        if (dao.pendingCompletions().isNotEmpty()) {
+        val userId = requireAuthenticatedUserId()
+        if (dao.pendingCompletions(userId).isNotEmpty()) {
             try {
                 syncLocked()
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 throw SignOutBlockedException(
                     "Connect to the internet and sync saved completions before signing out.",
                     error,
                 )
             }
-            if (dao.pendingCompletions().isNotEmpty()) {
+            if (dao.pendingCompletions(userId).isNotEmpty()) {
                 throw SignOutBlockedException("Sync saved completions before signing out.")
             }
         }
 
         unregisterFcmTokens()
         client.auth.signOut()
-        dao.clearOccurrences()
+        dao.clearOccurrences(userId)
         SystemWidget().updateAll(context)
     }
 
     suspend fun complete(occurrenceId: String) = syncMutex.withLock {
-        val row = dao.occurrence(occurrenceId) ?: return@withLock
+        val userId = requireAuthenticatedUserId()
+        val row = dao.occurrence(userId, occurrenceId) ?: return@withLock
         if (row.status != "pending") return@withLock
         val key = UUID.randomUUID().toString()
         dao.queueCompletion(
-            PendingCompletion(idempotencyKey = key, occurrenceId = occurrenceId),
+            PendingCompletion(idempotencyKey = key, userId = userId, occurrenceId = occurrenceId),
             row.copy(status = "completed", completedAt = Instant.now().toString()),
         )
         SystemWidget().updateAll(context)
         try {
             syncLocked()
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
             dev.system.app.sync.SyncWorker.enqueue(context)
             throw error
@@ -138,68 +159,71 @@ class SystemRepository(private val context: Context, private val database: Syste
     }
 
     suspend fun queueCompletion(occurrenceId: String) = syncMutex.withLock {
-        val row = dao.occurrence(occurrenceId) ?: return@withLock
+        val userId = requireAuthenticatedUserId()
+        val row = dao.occurrence(userId, occurrenceId) ?: return@withLock
         if (row.status != "pending") return@withLock
         dao.queueCompletion(
-            PendingCompletion(UUID.randomUUID().toString(), occurrenceId),
+            PendingCompletion(UUID.randomUUID().toString(), userId, occurrenceId),
             row.copy(status = "completed", completedAt = Instant.now().toString()),
         )
         SystemWidget().updateAll(context)
+    }
+
+    suspend fun pendingSnapshotForCurrentUser(): List<CachedOccurrence> {
+        val userId = authenticatedUserId(loadFromStorage = true) ?: return emptyList()
+        return dao.pendingSnapshot(userId)
     }
 
     suspend fun syncNow() = syncMutex.withLock { syncLocked() }
 
     private suspend fun syncLocked() {
         withContext(Dispatchers.IO) {
-            client.auth.awaitInitialization()
-            if (currentUser == null) client.auth.loadFromStorage(autoRefresh = true)
-            if (currentUser == null) return@withContext
+            val userId = authenticatedUserId(loadFromStorage = true)
+            if (userId == null) {
+                mutableSyncState.value = SyncState(syncing = false)
+                return@withContext
+            }
             mutableSyncState.value = mutableSyncState.value.copy(syncing = true, error = null)
             try {
-                val queued = dao.pendingCompletions()
+                for (item in dao.legacyPendingCompletions()) {
+                    val visibleToCurrentUser = client.from("task_occurrences")
+                        .select(columns = Columns.raw("id")) {
+                            filter { eq("id", item.occurrenceId) }
+                        }
+                        .decodeList<OccurrenceIdResponse>()
+                        .isNotEmpty()
+                    if (visibleToCurrentUser) dao.adoptLegacyCompletion(userId, item.idempotencyKey)
+                }
+                val queued = dao.pendingCompletions(userId)
                 for (item in queued) {
                     try {
                         client.postgrest.rpc(
                             "complete_task_occurrence",
                             CompletionParams(item.occurrenceId, item.idempotencyKey),
                         )
-                        dao.removePendingCompletion(item.idempotencyKey)
+                        dao.removePendingCompletion(userId, item.idempotencyKey)
                     } catch (error: Throwable) {
-                        dao.setCompletionError(item.idempotencyKey, "Could not sync completion yet")
+                        dao.setCompletionError(userId, item.idempotencyKey, "Could not sync completion yet")
                         throw error
                     }
                 }
 
-                val upperBound = Instant.now().plusSeconds(120 * 86400L).toString()
-                val columns = Columns.raw("""
-            id,task_id,scheduled_for,all_day,status,completed_at,
-            task:tasks!inner(title,notes,archived_at)
-        """.trimIndent())
-                val datedRows = client.from("task_occurrences").select(columns = columns) {
-                    filter {
-                        eq("status", "pending")
-                        filter("scheduled_for", FilterOperator.LTE, upperBound)
-                    }
-                    order("scheduled_for", Order.ASCENDING)
-                    limit(250)
+                val columns = Columns.raw(OCCURRENCE_SELECT)
+                val rows = mutableListOf<CachedOccurrence>()
+                var offset = 0
+                while (true) {
+                    val page = client.from("task_occurrences").select(columns = columns) {
+                        filter { eq("status", "pending") }
+                        order("id", Order.ASCENDING)
+                        range(from = offset.toLong(), to = (offset + SYNC_PAGE_SIZE - 1).toLong())
+                    }.decodeList<OccurrenceResponse>()
+                    rows += page.filter { it.task.archivedAt == null }.map { it.toCache(userId) }
+                    if (page.size < SYNC_PAGE_SIZE) break
+                    offset += page.size
                 }
-                    .decodeList<OccurrenceResponse>()
-                    .filter { it.task.archivedAt == null }
-                    .map { it.toCache() }
-                val unscheduledRows = client.from("task_occurrences").select(columns = columns) {
-                    filter {
-                        eq("status", "pending")
-                        exact("scheduled_for", null)
-                    }
-                    limit(100)
-                }
-                    .decodeList<OccurrenceResponse>()
-                    .filter { it.task.archivedAt == null }
-                    .map { it.toCache() }
-                val rows = datedRows + unscheduledRows
 
-                dao.clearOccurrences()
-                if (rows.isNotEmpty()) dao.replaceOccurrences(rows)
+                dao.replaceOccurrencesSnapshot(userId, rows)
+                dao.clearLegacyOccurrences()
                 registerFcmToken()
                 SystemWidget().updateAll(context)
                 mutableSyncState.value = SyncState(syncing = false, lastSyncedAt = Instant.now().toString())
@@ -211,6 +235,17 @@ class SystemRepository(private val context: Context, private val database: Syste
                 throw error
             }
         }
+    }
+
+    private suspend fun requireAuthenticatedUserId(): String =
+        authenticatedUserId(loadFromStorage = true)
+            ?: throw IllegalStateException("Sign in to access your SYSTEM tasks.")
+
+    private suspend fun authenticatedUserId(loadFromStorage: Boolean): String? {
+        client.auth.awaitInitialization()
+        if (loadFromStorage && currentUser == null) client.auth.loadFromStorage(autoRefresh = false)
+        if (client.auth.sessionStatus.value !is SessionStatus.Authenticated) return null
+        return currentUser?.id
     }
 
     suspend fun loadGoals(): List<GoalProgress> = client.from("goal_progress")
@@ -225,9 +260,9 @@ class SystemRepository(private val context: Context, private val database: Syste
         try {
             val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
             rememberFcmToken(token)
-            client.from("device_tokens").upsert(DeviceTokenInsert(token = token)) {
-                onConflict = "token"
-            }
+            client.postgrest.rpc("system_register_device_token", DeviceTokenParams(token))
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: Throwable) {
             // Firebase is not configured until google-services.json is added.
         }
@@ -240,6 +275,7 @@ class SystemRepository(private val context: Context, private val database: Syste
             val currentToken = try {
                 com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
             } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 if (tokens.isEmpty()) {
                     throw SignOutBlockedException(
                         "Connect to the internet before signing out so SYSTEM can disable reminders on this device.",
@@ -259,6 +295,7 @@ class SystemRepository(private val context: Context, private val database: Syste
                 }
             }
         } catch (error: Throwable) {
+            if (error is CancellationException) throw error
             throw SignOutBlockedException(
                 "Connect to the internet before signing out so SYSTEM can disable reminders on this device.",
                 error,
@@ -277,6 +314,7 @@ class SystemRepository(private val context: Context, private val database: Syste
     }
 
     companion object {
+        private const val SYNC_PAGE_SIZE = 1000
         private const val AUTH_SCHEME = "dev.system.app"
         private const val AUTH_HOST = "auth"
         private const val AUTH_REDIRECT_URI = "$AUTH_SCHEME://$AUTH_HOST"
@@ -293,7 +331,7 @@ data class SyncState(
 )
 
 @Serializable
-private data class OccurrenceResponse(
+internal data class OccurrenceResponse(
     val id: String,
     @SerialName("task_id") val taskId: String,
     @SerialName("scheduled_for") val scheduledFor: String?,
@@ -302,11 +340,11 @@ private data class OccurrenceResponse(
     @SerialName("completed_at") val completedAt: String?,
     val task: TaskResponse,
 ) {
-    fun toCache() = CachedOccurrence(id, taskId, task.title, task.notes, scheduledFor, allDay, task.kind, status, completedAt)
+    fun toCache(userId: String) = CachedOccurrence(id, userId, taskId, task.title, task.notes, scheduledFor, allDay, task.kind, status, completedAt)
 }
 
 @Serializable
-private data class TaskResponse(
+internal data class TaskResponse(
     val title: String,
     val notes: String?,
     val kind: String,
@@ -314,7 +352,10 @@ private data class TaskResponse(
 )
 
 @Serializable
-private data class DeviceTokenInsert(val token: String, val platform: String = "android", val enabled: Boolean = true)
+private data class OccurrenceIdResponse(val id: String)
+
+@Serializable
+private data class DeviceTokenParams(@SerialName("p_token") val token: String)
 
 @Serializable
 private data class DeviceTokenStatus(val enabled: Boolean)

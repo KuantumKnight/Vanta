@@ -34,6 +34,7 @@ class WidgetFeedTest {
         status: String = "pending",
     ) = CachedOccurrence(
         id = id,
+        userId = "user-a",
         taskId = "task-$id",
         title = title,
         notes = null,

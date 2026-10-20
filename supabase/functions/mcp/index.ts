@@ -153,26 +153,28 @@ function registerTools(server: McpServer, supabase: any) {
   server.registerTool(
     "list_tasks",
     {
-      description: "Find the signed-in user's open tasks and dated habit occurrences. Set include_completed to true to include completed tasks in the results. Use the returned task_id or occurrence_id for updates and completion. If several results could match, ask which one the user means before changing or completing anything.",
+      description: "Find the signed-in user's open tasks and dated habit occurrences. Set include_completed to true to include completed tasks; skipped habit occurrences are never returned. Use limit and offset to page through large result sets. Use the returned task_id or occurrence_id for updates and completion. If several results could match, ask which one the user means before changing or completing anything.",
       inputSchema: z.object({
         from_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         through_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         query: z.string().trim().max(200).optional(),
         include_completed: z.boolean().default(false),
         limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).max(100000).default(0),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ from_date, through_date, query, include_completed, limit }) => {
+    async ({ from_date, through_date, query, include_completed, limit, offset }) => {
       let request = supabase.from("task_occurrences").select(OCCURRENCE_SELECT)
         .is("task.archived_at", null)
         .order("scheduled_for", { ascending: true, nullsFirst: false })
-        .limit(limit);
+        .order("id", { ascending: true });
       if (!include_completed) request = request.eq("status", "pending");
+      else request = request.neq("status", "skipped");
       if (from_date) request = request.gte("scheduled_for", localInstant(from_date));
       if (through_date) request = request.lt("scheduled_for", localInstant(dateAfter(through_date)));
       if (query) request = request.ilike("task.title", "%" + query.replace(/[%_]/g, "") + "%");
-      const { data, error } = await request;
+      const { data, error } = await request.range(offset, offset + limit - 1);
       throwIfError(error);
       return toolResult(data);
     },
@@ -192,7 +194,8 @@ function registerTools(server: McpServer, supabase: any) {
         reminder_at: z.string().nullable().optional(),
         reminder_time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
         archived: z.boolean().optional(),
-      }).refine((input) => !input.due_time || !!input.due_date, "due_time requires due_date"),
+      }).refine((input) => !input.due_time || !!input.due_date, "due_time requires due_date")
+        .refine((input) => !input.reminder_time || !!input.due_date, "reminder_time requires due_date"),
     },
     async (input) => {
       if (Object.keys(input).every((key) => key === "task_id" || key === "operation_id")) throw new Error("Provide at least one task change.");

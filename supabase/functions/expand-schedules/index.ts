@@ -2,6 +2,7 @@ import { admin, json, requireInternal } from "../_shared/admin.ts";
 import { getOccurrences, localDateTimeToUtc, type ScheduleForExpansion } from "../_shared/recurrence.ts";
 
 const BATCH_SIZE = 500;
+const SCHEDULE_PAGE_SIZE = 1000;
 const LOOKBACK_DAYS = 30;
 const LOOKAHEAD_DAYS = 90;
 
@@ -20,14 +21,21 @@ Deno.serve(async (request) => {
   const now = new Date();
   const from = new Date(now.getTime() - LOOKBACK_DAYS * 86400000);
   const to = new Date(now.getTime() + LOOKAHEAD_DAYS * 86400000);
-  const { data: schedules, error } = await admin.from("habit_schedules")
-    .select("id,task_id,user_id,dtstart,timezone,rrule,rdates,exdates,effective_from,effective_until,reminder_time")
-    .is("effective_until", null).range(0, 999);
-  if (error) return json({ error: "Could not load schedules." }, 500);
+  const schedules: ScheduleForExpansion[] = [];
+  for (let offset = 0; ; offset += SCHEDULE_PAGE_SIZE) {
+    const { data, error } = await admin.from("habit_schedules")
+      .select("id,task_id,user_id,dtstart,timezone,rrule,rdates,exdates,effective_from,effective_until,reminder_time")
+      .is("effective_until", null)
+      .order("id", { ascending: true })
+      .range(offset, offset + SCHEDULE_PAGE_SIZE - 1);
+    if (error) return json({ error: "Could not load schedules." }, 500);
+    schedules.push(...((data ?? []) as ScheduleForExpansion[]));
+    if ((data ?? []).length < SCHEDULE_PAGE_SIZE) break;
+  }
 
   let materialized = 0;
   let skipped = 0;
-  for (const schedule of (schedules ?? []) as ScheduleForExpansion[]) {
+  for (const schedule of schedules) {
     try {
       const occurrences = getOccurrences(schedule, from, to);
       const rows = occurrences.map((scheduled) => {

@@ -21,11 +21,11 @@ class SignInScreenTest {
     @Test
     fun emailSignInValidatesAddressBeforeAllowingCodeRequest() {
         composeRule.onNodeWithText("Continue with email").assertIsDisplayed()
-        composeRule.onNodeWithText("Email me a sign-in code").assertIsNotEnabled()
+        composeRule.onNodeWithText("Send sign-in email").assertIsNotEnabled()
 
         composeRule.onNode(hasSetTextAction()).performTextInput("qa@example.com")
 
-        composeRule.onNodeWithText("Email me a sign-in code").assertIsEnabled()
+        composeRule.onNodeWithText("Send sign-in email").assertIsEnabled()
     }
 
     @Test

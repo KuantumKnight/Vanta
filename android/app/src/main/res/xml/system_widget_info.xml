@@ -4,4 +4,4 @@
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:initialLayout="@android:layout/simple_list_item_1"
-    android:updatePeriodMillis="0" />
+    android:updatePeriodMillis="1800000" />

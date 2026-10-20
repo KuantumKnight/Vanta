@@ -3,6 +3,8 @@ package dev.system.app
 import android.app.Application
 import androidx.room.Room
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.Constraints
+import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import dev.system.app.data.SystemDatabase
@@ -49,7 +51,7 @@ class SystemApplication : Application() {
                         applicationContext,
                         SystemDatabase::class.java,
                         "system-cache.db",
-                    ).addMigrations(SystemDatabase.MIGRATION_1_2).build()
+                    ).addMigrations(SystemDatabase.MIGRATION_1_2, SystemDatabase.MIGRATION_2_3).build()
                     val repository = SystemRepository(applicationContext, database)
                     mutableStartup.value = StartupState.Ready(database, repository)
                     schedulePeriodicSync()
@@ -78,7 +80,9 @@ class SystemApplication : Application() {
 
     private fun schedulePeriodicSync() {
         runCatching {
-            val request = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES).build()
+            val request = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
             WorkManager.getInstance(this).enqueueUniquePeriodicWork(
                 SyncWorker.PERIODIC_NAME,
                 ExistingPeriodicWorkPolicy.UPDATE,

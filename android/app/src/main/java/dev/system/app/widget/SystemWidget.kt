@@ -48,6 +48,7 @@ import dev.system.app.MainActivity
 import dev.system.app.SystemApplication
 import dev.system.app.data.CachedOccurrence
 import dev.system.app.sync.SyncWorker
+import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -61,7 +62,9 @@ class SystemWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val rows = try {
-            (context.applicationContext as SystemApplication).awaitDatabase().systemDao().pendingSnapshot()
+            (context.applicationContext as SystemApplication).awaitRepository().pendingSnapshotForCurrentUser()
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             Log.e("SystemWidget", "Could not read the local task cache", error)
             null

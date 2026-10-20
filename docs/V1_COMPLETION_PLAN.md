@@ -1,6 +1,6 @@
 # SYSTEM V1 completion plan
 
-Updated: 26 September 2026
+Updated: 21 October 2026
 
 This plan tracks the shortest dependable path from the current repository to a polished, working SYSTEM V1. Supabase remains the authority for task data. Room is a cache; ChatGPT is the task command center; Android is the review and completion surface.
 
@@ -8,12 +8,28 @@ This plan tracks the shortest dependable path from the current repository to a p
 
 | Area | Status | Evidence / remaining condition |
 |---|---|---|
-| Supabase schema and server functions | Deployed; live acceptance still needed | Eight migrations and four Edge Functions are active on `zpxcilhmbbhowqceyafj`. Rolled-back authenticated SQL tests verified create-task idempotency, changed-payload rejection, one occurrence, RLS read isolation, goal progress, future schedule edits with completed-history preservation, reminder claim deduplication, and cross-owner write denial. Unauthenticated MCP/internal probes returned 401; anonymous task insert and RPC access are denied. The live database still has no persisted tasks, occurrences, enabled device tokens, or sent reminders. Security Advisor reports ten authenticated `SECURITY DEFINER` RPC warnings and leaked-password protection disabled; password sign-in is not used by SYSTEM. |
+| Supabase schema and server functions | Deployed; audit migrations pending | Eight migrations and four Edge Functions were active on `zpxcilhmbbhowqceyafj` at the last live check. Four forward audit migrations are now in source: remove direct occurrence inserts, add owner-safe device-token registration, privatize the consent probe bucket, and make refresh triggers batched and best-effort. They have not been applied to the hosted project. The live database still has no persisted tasks, occurrences, enabled device tokens, or sent reminders. |
 | MCP tools and OAuth server | Deployed; owner link pending | The live `mcp` function is version 4 and uses Supabase's authenticated-user OAuth integration. ChatGPT Developer mode still needs to connect and finish the owner OAuth flow. |
 | Consent and sign-in | Link/code flow implemented; Vercel deploy and code-template configuration pending | Android and the consent site accept an 8-digit email code and retain their magic-link callbacks. Supabase's Management API rejected the hosted template update because this free-tier project uses the default email provider. Configure custom SMTP or upgrade before switching the templates to `{{ .Token }}`. The consent routes pass lint/build. A manual Vercel deployment workflow is ready with project/team IDs stored as repository variables; add the `VERCEL_TOKEN` Actions secret and run it. |
-| Android dashboard and widget | Implemented; rebuilt and emulator-tested | Current APK builds and lint passes. Four instrumentation tests pass, including email validation, Android deep-link fallback, Room offline-queue persistence, and timezone-aware widget grouping. The app cold-launches to the email sign-in screen. Authenticated dashboard rendering, an actual task row in the widget, and server-backed offline replay still need end-to-end verification. |
+| Android dashboard and widget | Implemented; rebuilt and emulator-tested | Room cache rows and queued mutations are scoped by Supabase user; snapshot replacement is transactional and paginated. A fresh debug build and all 7 instrumentation tests pass on the `SYSTEM_CI_QA_FINAL` API 36 emulator, including legacy Room migration, unowned-row isolation, user-scoped snapshot behavior, and the required task projection. Authenticated dashboard rendering, an actual task row in the widget, and server-backed offline replay still need end-to-end verification. |
 | Firebase push refresh | Sender credentials configured; device test pending | Firebase project `gdg-web-dev` has app `dev.system.app`; `google-services.json` is ignored locally and its encoded config is in GitHub secret `SYSTEM_GOOGLE_SERVICES_JSON_B64`. FCM API is enabled, and dedicated `system-fcm-sender` has a custom role limited to `cloudmessaging.messages.create`. FCM credentials are now Supabase Edge Function secrets and successfully minted a short-lived FCM OAuth token. A signed-in device token and delivery test are still missing. |
 | Production milestone | Not yet proven end to end | One Supabase Auth user exists, but there are no tasks or registered devices. Verify ChatGPT create → Supabase row → FCM refresh → closed-app widget after owner OAuth linking and a phone sign-in. |
+
+## Source audit — 21 October 2026
+
+The audit covered the checked-out `main` commit `304fe0c`, Android cache and workers, all migrations and Edge Functions, consent routes, GitHub Actions, ignored configuration paths, and the product data-flow contract. The local checkout was clean before changes. Findings and source remediations:
+
+- Authenticated clients could insert arbitrary `task_occurrences`, bypassing the completion RPC. A forward migration removes that table write grant.
+- Room cache and completion queue rows lacked an owner ID, so a new authenticated account could observe or replay a previous account's local data. Room v3 scopes queries and mutations by user. Legacy rows remain unowned; sync claims an old completion only after the occurrence is visible through that account's RLS view, and clears old cached text after a successful server snapshot.
+- Android sync previously used fixed row caps and a 120-day cutoff. It now pages through every pending occurrence, and the MCP list tool supports `offset` pagination and excludes skipped occurrences from completed results.
+- Android's PostgREST projection omitted `kind`, which the row decoder requires. Nonempty sync responses could not decode; the projection now includes the field and has a regression test.
+- MCP task creation accepted `reminder_time` without `due_date` but silently ignored it. The input schema now rejects that incomplete request.
+- A globally unique FCM token could remain attached to a previous account. Registration now uses an owner-checked RPC that transfers the token to the signed-in user.
+- A public storage bucket created for an anonymous consent probe remained after its upload policy was removed. A forward migration deletes the probe object and makes the bucket private.
+- Per-row refresh triggers could produce one FCM request per generated occurrence, and a missing Vault secret could fail the task transaction. Forward triggers batch affected owners per statement and catch signal errors so Supabase remains authoritative.
+- The manual Vercel production deploy now runs only from `main`.
+
+Source changes still need the backend migrations deployed, and the hosted OAuth, FCM, and device acceptance flow remains pending. The SQL migrations have not been executed because the local Docker engine is unavailable. No external account or production deployment was changed during this audit.
 
 ## Build sequence
 
@@ -107,3 +123,9 @@ Checked on 26 September 2026:
 - Vercel project `system-consent` is linked in the local `.vercel` config. The connected Vercel API lists no projects, returns 403 on deployment listing, and has a `get_project` schema mismatch. Local `vercel whoami` fails with `fetch failed`, and the Brave browser connector cannot load its request-header policy. A manual GitHub Actions deploy workflow is committed; it awaits the repository `VERCEL_TOKEN` secret.
 - The consent site requests an 8-digit code and verifies it server-side while setting the authenticated cookie. The `/auth/callback` route remains as a fallback for older links and exchanges PKCE/email confirmation codes while rejecting external `next` redirects. `npm run lint` and `npm run build` pass. The Supabase redirect allowlist is verified; deploying the consent UI and completing live email-code verification remain open.
 - Android requests an 8-digit email code and verifies it with Supabase; the native `dev.system.app://auth` PKCE callback remains available for older link emails. `assembleDebug`, lint, and 4 emulator instrumentation tests pass. A real owner-inbox sign-in remains pending the hosted template change.
+
+Audit verification on 21 October 2026:
+
+- A forced fresh Android build completed and `connectedDebugAndroidTest --rerun-tasks` passed all 7 current tests on `SYSTEM_CI_QA_FINAL` (API 36): 2 sign-in tests, 3 Room tests including v1→v3 migration, 1 task-response projection test, and 1 widget feed test.
+- The first post-change test attempt used a stale installed APK, and a later emulator restart was needed. The final recorded pass is from the forced rebuild and fresh test execution above.
+- The four forward Supabase migrations remain unapplied. Their SQL was reviewed but not executed: Docker Desktop's Linux engine is unavailable in this environment. Hosted privilege, storage, refresh-trigger, token-transfer, and deployment-branch checks remain required.
