@@ -12,7 +12,7 @@ SYSTEM is a personal task and habit dashboard for Android, with ChatGPT as the c
 ## Quick start
 
 1. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in the ignored `android/local.properties` file.
-2. Build the Android app with JDK 17 and Android SDK 37: `cd android; .\gradlew.bat assembleDebug`.
+2. Build the Android app with JDK 17 and Android SDK 37.0: `cd android; .\gradlew.bat assembleDebug`.
 3. Deploy `web/consent` to Vercel and configure its two `NEXT_PUBLIC_SUPABASE_*` values.
 4. Set the Supabase Auth Site URL to the consent site's HTTPS origin.
 5. Connect ChatGPT Developer mode to the Supabase `/functions/v1/mcp` endpoint and complete OAuth linking.

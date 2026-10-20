@@ -84,7 +84,7 @@ SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_PUBLISHABLE_KEY=<publishable-key>
 ```
 
-Install JDK 17 and Android SDK 37, then build:
+Install JDK 17 and Android SDK 37.0, then build:
 
 ```powershell
 cd android
