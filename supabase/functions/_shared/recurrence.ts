@@ -29,6 +29,23 @@ export function localDateTimeToUtc(date: string, time = "00:00"): string {
   return parsed.toISOString();
 }
 
+export function nextLocalDate(date: string): string {
+  localDateTimeToUtc(date, "00:00");
+  const next = new Date(date + "T00:00:00.000Z");
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
+}
+
+export function parseIsoInstant(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-](?:0\d|1\d|2[0-3]):[0-5]\d)$/i.test(value)) {
+    throw new Error("The value must be an ISO datetime with an explicit time zone.");
+  }
+  localDateTimeToUtc(value.slice(0, 10), value.slice(11, 16));
+  const instant = new Date(value);
+  if (Number.isNaN(instant.valueOf())) throw new Error("The value must be a valid ISO datetime.");
+  return instant.toISOString();
+}
+
 export function todayInZone(now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",

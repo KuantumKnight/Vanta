@@ -26,7 +26,7 @@ jobs:
       - run: npm run lint
       - run: npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_URL: https://ci.invalid
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
 
   edge-functions:
@@ -51,9 +51,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
       - uses: android-actions/setup-android@v4
         with:
-          packages: "platforms;android-37.0 build-tools;37.0.0"
+          packages: "platforms;android-36 platforms;android-37 build-tools;37.0.0"
       - name: Configure Firebase Android app
         working-directory: android
         env:
@@ -61,11 +62,30 @@ jobs:
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON_B64" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 --decode > app/google-services.json
-          elif [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            cat > app/google-services.json <<'JSON'
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "vanta-ci-placeholder",
+              "storage_bucket": "vanta-ci-placeholder.appspot.com"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:123456789012:android:abcdef0123456789abcd",
+                "android_client_info": { "package_name": "dev.system.app" }
+              },
+              "oauth_client": [],
+              "api_key": [{ "current_key": "ci-placeholder-not-a-secret" }],
+              "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+            }]
+          }
+          JSON
+          else
             echo "::error::Configure SYSTEM_GOOGLE_SERVICES_JSON_B64 to build the Firebase-enabled APK."
             exit 1
           fi
-      - name: Assemble debug APK
+      - name: Assemble, lint, and compile Android tests
         working-directory: android
         env:
           SUPABASE_URL: ${{ secrets.SYSTEM_SUPABASE_URL }}
@@ -79,7 +99,16 @@ jobs:
             echo "::error::Configure SYSTEM_SUPABASE_URL and SYSTEM_SUPABASE_PUBLISHABLE_KEY repository secrets."
             exit 1
           fi
-          bash ./gradlew --no-daemon assembleDebug
+          bash ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - name: Run Android instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: cd android && bash ./gradlew --no-daemon connectedDebugAndroidTest
       - uses: actions/upload-artifact@v7
         with:
           name: system-debug-apk

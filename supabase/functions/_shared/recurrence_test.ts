@@ -3,6 +3,8 @@ import {
   defaultReminderForDate,
   getOccurrences,
   localDateTimeToUtc,
+  nextLocalDate,
+  parseIsoInstant,
   todayInZone,
   validateRRule,
   type ScheduleForExpansion,
@@ -13,6 +15,14 @@ Deno.test("Asia/Kolkata dates reject impossible calendar values", () => {
   assertThrows(() => localDateTimeToUtc("2026-02-30", "09:00"), Error);
   assertThrows(() => localDateTimeToUtc("2026-09-24", "24:00"), Error);
   assertEquals(todayInZone(new Date("2026-09-23T20:00:00.000Z")), "2026-09-24");
+});
+
+Deno.test("date range ends and explicit reminder instants are validated", () => {
+  assertEquals(nextLocalDate("2026-09-24"), "2026-09-25");
+  assertThrows(() => nextLocalDate("2026-02-30"), Error);
+  assertEquals(parseIsoInstant("2026-09-24T09:15:00+05:30"), "2026-09-24T03:45:00.000Z");
+  assertThrows(() => parseIsoInstant("2026-09-24"), Error);
+  assertThrows(() => parseIsoInstant("2026-02-30T09:15:00Z"), Error);
 });
 
 Deno.test("date-only reminders use yesterday at 9 AM and catch up once", () => {

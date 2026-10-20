@@ -51,7 +51,11 @@ class SystemApplication : Application() {
                         applicationContext,
                         SystemDatabase::class.java,
                         "system-cache.db",
-                    ).addMigrations(SystemDatabase.MIGRATION_1_2, SystemDatabase.MIGRATION_2_3).build()
+                    ).addMigrations(
+                        SystemDatabase.MIGRATION_1_2,
+                        SystemDatabase.MIGRATION_2_3,
+                        SystemDatabase.MIGRATION_3_4,
+                    ).build()
                     val repository = SystemRepository(applicationContext, database)
                     mutableStartup.value = StartupState.Ready(database, repository)
                     schedulePeriodicSync()

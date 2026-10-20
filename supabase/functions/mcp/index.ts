@@ -6,6 +6,8 @@ import {
   defaultReminderForDate,
   getOccurrences,
   localDateTimeToUtc,
+  nextLocalDate,
+  parseIsoInstant,
   todayInZone,
   validateRRule,
   type ScheduleForExpansion,
@@ -25,12 +27,6 @@ function throwIfError(error: { message: string } | null): void {
 
 function dateString(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-function dateAfter(date: string): string {
-  const result = new Date(date + "T00:00:00Z");
-  result.setUTCDate(result.getUTCDate() + 1);
-  return result.toISOString().slice(0, 10);
 }
 
 function localInstant(date: string, time?: string): string {
@@ -59,11 +55,7 @@ function normalizeReminder(
   reminderAt: string | undefined,
   reminderTime: string | undefined,
 ): string | null {
-  if (reminderAt) {
-    const explicit = new Date(reminderAt);
-    if (Number.isNaN(explicit.valueOf())) throw new Error("reminder_at must be an ISO datetime.");
-    return explicit.toISOString();
-  }
+  if (reminderAt !== undefined) return parseIsoInstant(reminderAt);
   if (!dueDate) return null;
   if (reminderTime) return localInstant(dueDate, reminderTime);
   if (dueAt) return null;
@@ -109,10 +101,9 @@ function registerTools(server: McpServer, supabase: any) {
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const { data, error } = await supabase.auth.getUser();
+      const { error } = await supabase.auth.getUser();
       throwIfError(error);
       return toolResult({
-        user_id: data.user.id,
         now: new Date().toISOString(),
         local_date: todayInZone(),
         timezone: TIME_ZONE,
@@ -130,9 +121,11 @@ function registerTools(server: McpServer, supabase: any) {
         notes: z.string().max(4000).optional(),
         due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         due_time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-        reminder_at: z.string().optional(),
+        reminder_at: z.string().max(64).optional(),
         reminder_time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-      }).refine((input) => !input.due_time || !!input.due_date, "due_time requires due_date"),
+      })
+        .refine((input) => !input.due_time || !!input.due_date, "due_time requires due_date")
+        .refine((input) => !input.reminder_time || !!input.due_date, "reminder_time requires due_date"),
     },
     async ({ operation_id, title, notes, due_date, due_time, reminder_at, reminder_time }) => {
       const scheduledFor = due_date ? localInstant(due_date, due_time) : null;
@@ -172,7 +165,7 @@ function registerTools(server: McpServer, supabase: any) {
       if (!include_completed) request = request.eq("status", "pending");
       else request = request.neq("status", "skipped");
       if (from_date) request = request.gte("scheduled_for", localInstant(from_date));
-      if (through_date) request = request.lt("scheduled_for", localInstant(dateAfter(through_date)));
+      if (through_date) request = request.lt("scheduled_for", localInstant(nextLocalDate(through_date)));
       if (query) request = request.ilike("task.title", "%" + query.replace(/[%_]/g, "") + "%");
       const { data, error } = await request.range(offset, offset + limit - 1);
       throwIfError(error);
@@ -191,11 +184,10 @@ function registerTools(server: McpServer, supabase: any) {
         notes: z.string().max(4000).nullable().optional(),
         due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         due_time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-        reminder_at: z.string().nullable().optional(),
+        reminder_at: z.string().max(64).nullable().optional(),
         reminder_time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
         archived: z.boolean().optional(),
-      }).refine((input) => !input.due_time || !!input.due_date, "due_time requires due_date")
-        .refine((input) => !input.reminder_time || !!input.due_date, "reminder_time requires due_date"),
+      }).refine((input) => !input.due_time || !!input.due_date, "due_time requires due_date"),
     },
     async (input) => {
       if (Object.keys(input).every((key) => key === "task_id" || key === "operation_id")) throw new Error("Provide at least one task change.");
@@ -214,6 +206,7 @@ function registerTools(server: McpServer, supabase: any) {
         throwIfError(error);
         if (!occurrence) throw new Error("Task occurrence not found.");
         const date = occurrence.scheduled_for ? dateFromInstant(occurrence.scheduled_for) : undefined;
+        if (input.reminder_time && !date) throw new Error("Add a due date before setting a reminder time.");
         reminder = input.reminder_at === null
           ? null
           : normalizeReminder(date, occurrence.all_day ? undefined : occurrence.scheduled_for ?? undefined, input.reminder_at ?? undefined, input.reminder_time);

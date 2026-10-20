@@ -19,7 +19,13 @@ data class CachedOccurrence(
     val completedAt: String?,
 )
 
-@Entity(tableName = "pending_completions", indices = [Index(value = ["user_id", "queuedAt"])])
+@Entity(
+    tableName = "pending_completions",
+    indices = [
+        Index(value = ["user_id", "queuedAt"]),
+        Index(value = ["user_id", "occurrenceId"], unique = true),
+    ],
+)
 data class PendingCompletion(
     @PrimaryKey val idempotencyKey: String,
     @ColumnInfo(name = "user_id", defaultValue = "''") val userId: String,

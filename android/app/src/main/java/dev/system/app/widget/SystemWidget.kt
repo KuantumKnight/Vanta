@@ -184,7 +184,7 @@ class CompleteOccurrenceAction : ActionCallback {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork("system-complete-$occurrenceId", ExistingWorkPolicy.KEEP, request)
+        WorkManager.getInstance(context).enqueueUniqueWork("system-complete-$occurrenceId", ExistingWorkPolicy.REPLACE, request)
         SystemWidget().updateAll(context)
     }
 }

@@ -33,7 +33,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             val request = OneTimeWorkRequestBuilder<SyncWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork(IMMEDIATE_NAME, ExistingWorkPolicy.KEEP, request)
+            // A refresh that arrives during a running sync must trigger another fetch.
+            WorkManager.getInstance(context).enqueueUniqueWork(IMMEDIATE_NAME, ExistingWorkPolicy.REPLACE, request)
         }
     }
 }

@@ -28,13 +28,18 @@ interface SystemDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun replaceOccurrences(rows: List<CachedOccurrence>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun addPendingCompletion(item: PendingCompletion)
 
+    @Query("SELECT EXISTS(SELECT 1 FROM pending_completions WHERE user_id = :userId AND occurrenceId = :occurrenceId)")
+    suspend fun hasQueuedCompletion(userId: String, occurrenceId: String): Boolean
+
     @Transaction
-    suspend fun queueCompletion(item: PendingCompletion, optimisticOccurrence: CachedOccurrence) {
+    suspend fun queueCompletion(item: PendingCompletion, optimisticOccurrence: CachedOccurrence): Boolean {
+        if (hasQueuedCompletion(item.userId, item.occurrenceId)) return false
         addPendingCompletion(item)
         replaceOccurrences(listOf(optimisticOccurrence))
+        return true
     }
 
     @Query("SELECT * FROM pending_completions WHERE user_id = :userId ORDER BY queuedAt ASC")
@@ -73,7 +78,7 @@ interface SystemDao {
 
 }
 
-@Database(entities = [CachedOccurrence::class, PendingCompletion::class], version = 3, exportSchema = false)
+@Database(entities = [CachedOccurrence::class, PendingCompletion::class], version = 4, exportSchema = false)
 abstract class SystemDatabase : RoomDatabase() {
     abstract fun systemDao(): SystemDao
 
@@ -90,6 +95,21 @@ abstract class SystemDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE pending_completions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_cached_occurrences_user_id_status ON cached_occurrences(user_id, status)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_pending_completions_user_id_queuedAt ON pending_completions(user_id, queuedAt)")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    DELETE FROM pending_completions
+                    WHERE rowid NOT IN (
+                        SELECT MIN(rowid) FROM pending_completions GROUP BY user_id, occurrenceId
+                    )
+                """.trimIndent())
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_pending_completions_user_id_occurrenceId " +
+                        "ON pending_completions(user_id, occurrenceId)",
+                )
             }
         }
     }

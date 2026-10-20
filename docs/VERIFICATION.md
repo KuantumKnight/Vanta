@@ -2,10 +2,10 @@
 
 ## Source audit changes — 21 October 2026
 
-The following source changes are not yet deployed to the hosted Supabase project. Apply the four new migrations before treating these backend checks as passed. Android build and instrumentation verification is recorded below.
+The four repository audit migrations dated `20261021090000` through `20261021090200` are not deployed to the hosted Supabase project. The separate `20261021100000_system_device_token_lifecycle.sql` migration was applied and verified afterward. Apply the four audit migrations in order before treating their backend checks as passed.
 
 - Verify authenticated clients cannot insert task occurrences directly, while `complete_task_occurrence` still succeeds with an owner token.
-- Verify an FCM token registered under a second signed-in account transfers to that account, and the old account no longer reads it.
+- Verify sign-out disables the registered token, another account cannot claim an active token, and a disabled token can be reused after an account switch.
 - Verify the `system-consent` bucket is private and the anonymous `probe.html` object is absent.
 - Verify task and occurrence mutations still commit when the Vault refresh secret is absent, and a multi-row insert queues at most one refresh per owner for the statement.
 - Verify Android cache queries return only the active user, paginate beyond 1,000 pending rows, preserve the queued optimistic row during an atomic snapshot, and replay only that user's queue.
@@ -16,11 +16,24 @@ The following source changes are not yet deployed to the hosted Supabase project
 
 | Check | Result | Evidence / next step |
 |---|---|---|
-| Android build and instrumentation | Passed | Forced fresh build; `connectedDebugAndroidTest --rerun-tasks`: 7 tests, 0 failures on `SYSTEM_CI_QA_FINAL` API 36. Covers sign-in validation and deep link, Room user isolation and snapshot replacement, v1→v3 migration with legacy rows remaining unowned, required task projection fields, and widget feed grouping. |
+| Android build and instrumentation | Passed | Initial audit run: `connectedDebugAndroidTest --rerun-tasks` passed 7 tests on `SYSTEM_CI_QA_FINAL` API 36, covering sign-in validation/deep links, Room user isolation and snapshot replacement, v1→v3 migration, task projection, and widget feed grouping. The v1→v4 migration and duplicate-queue test passed in the follow-up run below. |
 | Consent app lint/build | Passed | `npm run lint` and `npm run build` passed after the source audit changes. |
-| Edge Function tests/type checks | Passed | Five recurrence tests and `deno check` for MCP, schedule expansion, push refresh, and reminders passed after the source changes. |
-| SQL migration execution | Not run | Docker Desktop's Linux engine was unavailable. Review the migration SQL, then apply and verify in a disposable local Supabase project or the hosted project using the checks above. |
-| Hosted migration and core-flow acceptance | Pending | No Supabase migration or Vercel deployment was made during this audit. Verify migrations, ChatGPT OAuth, Android sign-in, FCM refresh, and widget convergence in the hosted environment. |
+| Edge Function tests/type checks | Passed | Initial audit run: five recurrence tests and `deno check` for MCP, schedule expansion, push refresh, and reminders passed. The later date-validation test and full type-check rerun are recorded below. |
+| SQL migration execution | Not run during initial audit | Docker Desktop's Linux engine was unavailable. The later remote device-token migration and rollback acceptance results are recorded below; the four `20261021090000`–`20261021090200` audit migrations remain pending. |
+| Hosted migration and core-flow acceptance | Pending during initial audit | ChatGPT OAuth, owner Android sign-in, FCM refresh, and closed-app widget convergence still require the owner account and physical phone. |
+
+## Follow-up verification — 21 October 2026
+
+| Check | Result | Evidence |
+|---|---|---|
+| Android build, lint, and instrumentation | Passed | `cd android; .\gradlew.bat --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest connectedDebugAndroidTest` passed on `SYSTEM_CI_QA_FINAL` API 36. Eight instrumentation tests passed, including the v1→v4 Room migration, duplicate queue prevention, user isolation, task projection, sign-in, and widget feed. |
+| Consent site | Passed | `npm run lint` and `npm run build` completed successfully in `web/consent`. |
+| Edge Function recurrence tests | Passed | Six tests passed, including invalid date rejection and ISO reminder timestamp validation. |
+| Edge Function type checks | Passed | `deno check --config supabase/deno.json` passed for MCP, schedule expansion, push refresh, and reminders. |
+| Hosted migration history | Matched for applied migrations | `npx --yes supabase migration list --linked --project-ref zpxcilhmbbhowqceyafj` shows the local and remote `20261017045929` and `20261021100000` versions match. The four `20261021090000`–`20261021090200` repository audit migrations remain unapplied. |
+| Rollback acceptance | Passed | `npx --yes supabase db query --linked --project-ref zpxcilhmbbhowqceyafj --file supabase/acceptance_rollback.sql` passed idempotent MCP create/complete, changed-payload rejection, owner isolation, device-token registration, active-token takeover rejection, and anonymous-grant checks; the transaction rolled back. |
+| Live MCP authentication | Passed | The deployed MCP function is version 5; an unauthenticated request returned HTTP 401. |
+| Primary closed-app phone flow | Pending | Physical Android sign-in, ChatGPT owner OAuth, FCM delivery while Vanta is closed, widget completion, and server replay still need owner account and device interaction. |
 
 The Android build emitted existing deprecation warnings for system bar properties, Firebase token access, and the messaging callback. They did not fail compilation.
 

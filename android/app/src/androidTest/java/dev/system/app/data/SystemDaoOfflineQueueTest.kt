@@ -94,6 +94,18 @@ class SystemDaoOfflineQueueTest {
     }
 
     @Test
+    fun duplicateQueueForOccurrenceKeepsOriginalIdempotencyKey() = runBlocking {
+        val dao = database.systemDao()
+        val occurrence = occurrence("same-occurrence", "user-a")
+        val first = PendingCompletion("first-operation", "user-a", occurrence.id, queuedAt = 1)
+        val duplicate = PendingCompletion("second-operation", "user-a", occurrence.id, queuedAt = 2)
+
+        assertTrue(dao.queueCompletion(first, occurrence.copy(status = "completed")))
+        assertEquals(false, dao.queueCompletion(duplicate, occurrence.copy(status = "completed")))
+        assertEquals(listOf(first), dao.pendingCompletions("user-a"))
+    }
+
+    @Test
     fun legacyRoomRowsMigrateWithoutAssumingAccountOwnership() = runBlocking {
         database.close()
         val legacy = SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(databaseName), null)
@@ -120,6 +132,15 @@ class SystemDaoOfflineQueueTest {
                 put("queuedAt", 1_790_280_000_000L)
             },
         )
+        legacy.insertOrThrow(
+            "pending_completions",
+            null,
+            ContentValues().apply {
+                put("idempotencyKey", "duplicate-legacy-key")
+                put("occurrenceId", "legacy-occurrence")
+                put("queuedAt", 1_790_280_000_001L)
+            },
+        )
         legacy.version = 1
         legacy.close()
 
@@ -134,6 +155,7 @@ class SystemDaoOfflineQueueTest {
             assertEquals("task", cursor.getString(0))
         }
         assertEquals("", dao.legacyPendingCompletions().single().userId)
+        assertEquals("legacy-key", dao.legacyPendingCompletions().single().idempotencyKey)
 
         // Production claims a legacy queue item only after its occurrence is
         // visible through the currently authenticated user's RLS policy.
@@ -157,6 +179,10 @@ class SystemDaoOfflineQueueTest {
 
     private fun openDatabase() = Room.databaseBuilder(context, SystemDatabase::class.java, databaseName)
         .allowMainThreadQueries()
-        .addMigrations(SystemDatabase.MIGRATION_1_2, SystemDatabase.MIGRATION_2_3)
+        .addMigrations(
+            SystemDatabase.MIGRATION_1_2,
+            SystemDatabase.MIGRATION_2_3,
+            SystemDatabase.MIGRATION_3_4,
+        )
         .build()
 }
