@@ -109,6 +109,9 @@ jobs:
           disk-size: 4G
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
+          pre-emulator-launch-script: |
+            sed -i '/^disk.dataPartition.size=/d' "$ANDROID_AVD_HOME/test.avd/config.ini"
+            printf 'disk.dataPartition.size=4G\n' >> "$ANDROID_AVD_HOME/test.avd/config.ini"
           script: cd android && bash ./gradlew --no-daemon connectedDebugAndroidTest
       - uses: actions/upload-artifact@v7
         with:
