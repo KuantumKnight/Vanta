@@ -124,7 +124,14 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: cd android && bash ./gradlew --no-daemon connectedDebugAndroidTest
-      - uses: actions/upload-artifact@v7
+      - name: Upload Android APK and test reports
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
-          name: system-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: system-android-build-and-test-reports
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/reports/androidTests/connected/debug/
+            android/app/build/outputs/androidTest-results/connected/debug/
+          if-no-files-found: warn
+          retention-days: 7
