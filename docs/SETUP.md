@@ -19,7 +19,7 @@ npx supabase link --project-ref <project-ref>
 npx supabase db push
 ```
 
-The hosted project has the original migrations plus `20261017045929_system_push_refresh_best_effort.sql` and `20261021100000_system_device_token_lifecycle.sql` applied. Four audit migrations, `20261021090000` through `20261021090200`, remain pending. The first two were modified before deployment; in particular, `20261021090030` now matches the safe token ownership behavior of the already-applied `20261021100000`. The complete applied/pending list and read-only production checks are recorded in [VERIFICATION.md](VERIFICATION.md). Apply pending migrations only through the reviewed hosted rollout sequence.
+The hosted project has the original migrations plus `20261017045929_system_push_refresh_best_effort.sql`, `20261021100000_system_device_token_lifecycle.sql`, and the rollout migrations `20261021090000`, `20261021090030`, `20261021090100`, and `20261021090200` applied. Remote history matches the repository; nothing is pending. The rollout preserves the exact repository migration IDs. `20261021090030` matches the safe token ownership behavior of `20261021100000`. Read-only production checks and rollback acceptance results are recorded in [VERIFICATION.md](VERIFICATION.md).
 
 Set the server-only Edge Function secrets in the Supabase dashboard or with the CLI. Supabase supplies `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to functions automatically.
 
@@ -30,7 +30,9 @@ npx supabase secrets set FCM_PROJECT_ID=<firebase-project-id> FCM_CLIENT_EMAIL=<
 
 Use a fresh random value for `INTERNAL_FUNCTION_SECRET`; the same value is stored in Supabase Vault by the server-jobs migration so database triggers and scheduled jobs can call the Edge Functions. Never put this value, a service-role key, or an FCM private key in Android, Vercel, or source control.
 
-The applied `20261017045929` migration makes refresh signaling best effort, so a missing Vault secret does not roll back task writes. The pending `20261021090200` migration changes refresh triggers to statement-level batching; until rollout, bulk writes may still signal once per row. The pending `20261021090100` migration makes the historical consent probe bucket private. Check the Supabase cron run history after setup. `sync-push`, `expand-schedules`, and `send-reminders` use the internal secret for calls from Postgres; the MCP function uses Supabase OAuth bearer tokens and runs with the signed-in user's identity under RLS.
+The applied `20261017045929` migration makes refresh signaling best effort, so a missing Vault secret does not roll back task writes. The applied `20261021090200` migration batches refresh triggers at statement level. The applied `20261021090100` migration makes the historical consent probe bucket private; the probe object is absent. Check the Supabase cron run history after setup. `sync-push`, `expand-schedules`, and `send-reminders` use the internal secret for calls from Postgres; the MCP function uses Supabase OAuth bearer tokens and runs with the signed-in user's identity under RLS.
+
+The current MCP Edge Function is deployed as v6. The repository sets `verify_jwt = false` for MCP so its OAuth handler validates the user's bearer token. To deploy only MCP without Docker, use `npx supabase functions deploy mcp --project-ref <project-ref> --use-api --no-verify-jwt`.
 
 ## OAuth consent site on Vercel
 

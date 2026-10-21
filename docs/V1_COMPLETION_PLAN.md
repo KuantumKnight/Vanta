@@ -8,13 +8,13 @@ Supabase remains the task authority. Android Room is an owner-scoped offline cac
 
 | Area | Status | Evidence / remaining condition |
 |---|---|---|
-| Source fixes for deployment blockers | Implemented locally | The occurrence and token migrations, Android replay/auth/cache/sync changes, hosted acceptance scripts, and rollout docs are in the current checkout. They are not yet production-deployed. |
-| Hosted migration state | Four pending | The hosted project has the original migrations plus `20261017045929` and `20261021100000` applied. `20261021090000`, `20261021090030`, `20261021090100`, and `20261021090200` are pending. See [VERIFICATION.md](VERIFICATION.md) for the full list and remote checks. |
-| Database acceptance | Hosted release gate pending | Database acceptance is run against the existing hosted project inside a rollback transaction after source checks, CI, and migration prechecks pass. It is not part of GitHub Actions. |
+| Source fixes for deployment blockers | Deployed | All four reviewed migrations are applied; `mcp` is deployed as v6. |
+| Hosted migration state | Complete | The four rollout versions are present in remote history and no migration is pending. |
+| Database acceptance | PASS | The hosted suite passed inside an explicit transaction ending in `ROLLBACK`; read-only residue checks returned zero acceptance rows. |
 | Android | Automated checks pass | Build, lint, APK/test APK assembly, and 19 API 36 instrumentation tests passed. No owner sign-in or live server replay has run. |
-| Consent and owner linking | Pending | Consent lint/build pass. Vercel deployment and ChatGPT owner OAuth are still pending. |
+| Consent and owner linking | Owner action pending | Consent lint/build pass. The current production deployment does not verify the latest source; the workflow needs `VERCEL_TOKEN`. ChatGPT owner OAuth remains pending. |
 | FCM and widget | Partially verified | Credentials and test code exist, but no owner device token or closed-app push-to-widget flow is verified. |
-| V1 production milestone | Not verified | The complete ChatGPT → Supabase → FCM → Android → Room → widget → offline replay → ChatGPT flow has not run. |
+| V1 production milestone | Owner acceptance pending | Hosted schema and MCP deployment passed backend checks. The live owner OAuth, phone, widget, and offline replay flow has not run. |
 
 ## Source fixes completed
 
@@ -34,20 +34,23 @@ On 21 October 2026:
 - Deno checks for MCP, schedule expansion, push refresh, and reminders: passed.
 - Android `testDebugUnitTest`, `lintDebug`, `assembleDebug`, and `assembleDebugAndroidTest`: passed. The unit-test task has no unit-test sources.
 - Android `connectedDebugAndroidTest`: 19 passed, 0 failed, 0 errors on `SYSTEM_CI_QA_FINAL` API 36.
-- Hosted database acceptance: not run yet. First complete source review, non-database CI, read-only hosted prechecks, and the compatibility baseline; apply the reviewed migrations before the full rollback acceptance.
-- Production migrations or Edge Functions: not changed.
+- Hosted migration rollout: `20261021090000`, `20261021090030`, `20261021090100`, and `20261021090200` applied with the exact repository IDs; no pending migrations.
+- Hosted rollback acceptance: passed. Anonymous mutation denial, cross-user isolation, direct occurrence write denial, habit creation/update/materialization/history, MCP and Android replay behavior, token ownership lifecycle, missing-occurrence classification, and best-effort refresh assertions all completed successfully.
+- MCP Edge Function: deployed from v5 to v6 with `verify_jwt=false`; unauthenticated initialize returned HTTP 401. Live authenticated MCP requires owner OAuth and remains part of phone acceptance.
+- Security advisor: 12 authenticated `SECURITY DEFINER` warnings reviewed as intentional and owner-guarded; leaked-password protection warning accepted while auth remains passwordless.
+- Vercel: latest production consent deployment is READY but lacks current Git commit metadata; `VERCEL_TOKEN` is required to run the production workflow from `main`.
 - Physical-device and owner ChatGPT acceptance: not run.
 
 Exact commands and migration evidence are in [VERIFICATION.md](VERIFICATION.md).
 
 ## Release gates
 
-1. Re-read the hosted migration list; confirm the applied `20261021100000` remains safe when earlier pending `20261021090030` is applied; confirm the consent probe object is absent.
-2. Run `acceptance_pre_migration.sql` and verify its transaction rolled back with no test rows left.
-3. Apply the four pending migrations in filename order only after source review, non-database CI, and migration-order and precheck results pass.
-4. Run `acceptance_database.sql`; verify occurrence writes are denied, habit create/update/materialization and history preservation work, active token takeover is denied, and disabled-token reassignment works. Verify no acceptance rows remain.
-5. Deploy/redeploy affected Edge Functions, run Supabase security advisors, and review every remaining warning.
-6. Stop architecture changes after rollout. Continue with the owner phone acceptance below.
+1. **Complete:** migration history matches all expected versions; the four rollout IDs are applied.
+2. **Complete:** `acceptance_database.sql` passed and rollback residue is zero.
+3. **Complete:** only the affected MCP Edge Function was deployed; unauthenticated access returned 401.
+4. **Complete:** security advisor warnings were reviewed and documented.
+5. **Owner action:** add `VERCEL_TOKEN` and run the consent production workflow from `main`; verify READY.
+6. **Owner action:** complete the phone and ChatGPT acceptance below. No further backend architecture work is planned.
 
 ## Owner phone acceptance
 

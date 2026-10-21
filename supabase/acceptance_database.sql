@@ -246,9 +246,19 @@ begin
   if (select count(*) from public.goal_links as gl where gl.goal_id = v_goal_id) <> 0 then
     raise exception 'Authenticated user read another user goal link';
   end if;
-  update public.goals as g set title = marker || '_GOAL_TAMPER' where g.id = v_goal_id;
-  get diagnostics affected_count = row_count;
-  if affected_count <> 0 then raise exception 'Cross-user goal table update affected a row'; end if;
+  -- Goal-table writes are revoked in the API grants migration. If a future
+  -- policy grants UPDATE, RLS must still filter this cross-user write.
+  rejected := false;
+  affected_count := 0;
+  begin
+    update public.goals as g set title = marker || '_GOAL_TAMPER' where g.id = v_goal_id;
+    get diagnostics affected_count = row_count;
+  exception when insufficient_privilege then
+    rejected := true;
+  end;
+  if not rejected and affected_count <> 0 then
+    raise exception 'Cross-user goal table update affected a row';
+  end if;
   rejected := false;
   begin
     perform public.mcp_update_goal(gen_random_uuid(), v_goal_id, marker || '_GOAL_TAMPER', null, true, false);

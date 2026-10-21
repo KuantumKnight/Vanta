@@ -4,9 +4,9 @@ Updated: 21 October 2026
 
 ## Current status
 
-The source fixes for the remaining architecture blockers are in the local `main` checkout. No production migrations or Edge Functions were deployed during this work. Hosted database acceptance is a controlled release gate after source checks, GitHub Actions, and the read-only migration precheck.
+The four reviewed repository migrations are applied to hosted project `zpxcilhmbbhowqceyafj`, the rollback-safe hosted database acceptance passed, and the updated `mcp` Edge Function is deployed as v6. The owner phone and ChatGPT OAuth acceptance flow is still pending.
 
-Do not claim production verification until the hosted rollback-safe database suite passes and the owner phone + ChatGPT closed-app acceptance flow has run.
+The backend rollout is verified through hosted SQL acceptance and an unauthenticated MCP smoke test. The authenticated MCP request through a real owner OAuth token and the owner phone flow remain owner acceptance steps.
 
 ## Migration history
 
@@ -25,18 +25,20 @@ The hosted project's read-only migration list was checked on 21 October 2026. Ap
 20261021100000 system_device_token_lifecycle
 ```
 
-Pending versions:
+The following versions were applied in this rollout on 21 October 2026:
 
-| Version | Status before rollout |
+| Version | Rollout result |
 |---|---|
-| `20261021090000` | Modified before deployment. Keeps direct occurrence writes revoked, adds the owner-checked materialization RPC, and makes already-completed Android replay idempotent. |
-| `20261021090030` | Modified before deployment. Returns the UUID and applies the same active-owner token rule as the already-applied `20261021100000`; an active foreign token cannot be claimed. |
-| `20261021090100` | Pending. The live `system-consent` bucket is still public, while the `probe.html` object is already absent. The migration's object delete is currently a no-op; it sets the bucket private. |
-| `20261021090200` | Pending. Replaces per-row refresh triggers with best-effort statement triggers. |
+| `20261021090000` | APPLIED. Authenticated direct occurrence `INSERT`, `UPDATE`, and `DELETE` are revoked. The narrow materialization RPC derives the user and task from `auth.uid()` and an owned active schedule. Android completion replay remains idempotent. |
+| `20261021090030` | APPLIED. Same-owner registration and disabled-token reassignment succeed; active foreign-owner takeover is rejected, matching `20261021100000`. |
+| `20261021090100` | APPLIED. `system-consent` is private and `probe.html` remains absent. The pending migration retained its exact version and omits a blocked, unnecessary direct delete from `storage.objects`; the object was already absent. |
+| `20261021090200` | APPLIED. Refresh triggers are statement-level/batched and signaling errors are caught so they cannot roll back authoritative writes. |
 
-The hosted `system_register_device_token(text)` definition was read and matches the safe semantics in the applied `20261021100000` migration. The hosted refresh trigger matches the applied `20261017045929` migration. The hosted privilege check still reports authenticated `INSERT` on `task_occurrences` as allowed; that is the pending `20261021090000` change. No pending migration has been applied remotely.
+All 14 expected versions are now present in remote history; no repository migrations remain pending. Supabase CLI 2.121.0 was authenticated and linked to `zpxcilhmbbhowqceyafj`. The first dry run listed exactly the four requested versions. The first apply stopped on Supabase's `storage.objects` delete guard after applying `90000` and `90030`; after removing that unnecessary delete from the still-pending `90100` source, a second dry run listed only `90100` and `90200`, and both applied successfully. No migration IDs were generated or manually inserted into hosted history.
 
-The local migration order places the four pending versions before the already-applied `20261021100000`. `20261021090030` was changed so applying that older pending version cannot restore the former token-takeover behavior.
+The local migration order places these versions before the already-applied `20261021100000`. `20261021090030` preserves the later token-lifecycle semantics when applied in that order.
+
+Read-only post-migration checks confirmed authenticated/anon occurrence writes are denied; the materialization RPC is `SECURITY DEFINER`, has an empty `search_path`, is executable only by authenticated callers, and derives identity from the caller; token ownership protection remains active; the consent bucket is private with zero probe objects; and all 15 widget-refresh triggers are statement-level.
 
 ## Checks actually run
 
@@ -52,7 +54,7 @@ All checks below ran on 21 October 2026 in the Vanta checkout.
 | `.\gradlew.bat --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` from `android` | Passed. `testDebugUnitTest` had no unit-test sources; lint, APK assembly, and Android test assembly passed. The documented Windows loopback-temp workaround was needed. |
 | `.\gradlew.bat --no-daemon connectedDebugAndroidTest` from `android` | Passed on `SYSTEM_CI_QA_FINAL` API 36: 19 tests, 0 failures, 0 errors. Includes queue persistence/migration and retry-state checks, cache identity, replay classification, sync follow-up gating, sign-in, response projection, and widget-feed tests. |
 
-GitHub Actions [run 45](https://github.com/KuantumKnight/Vanta/actions/runs/39536205576) passed on commit `5958a8a33bc8dc1c25e107fc6cdbd934371fefd3`: Consent site, Supabase Edge Functions, and Android debug APK including emulator instrumentation.
+GitHub Actions run 46 passed on commit `6bc99dffb431770c7e2ec66cc4fcc1063d3939bb`: Consent site, Supabase Edge Functions, and Android debug APK including emulator instrumentation. The rollout record and acceptance assertion fixes will be checked by CI after push.
 
 ## Database integration acceptance
 
@@ -70,17 +72,39 @@ The full acceptance SQL covers:
 
 **Pre-migration baseline: PASS.** After CI run 45 passed and the read-only precheck matched the expected state, `supabase/acceptance_pre_migration.sql` ran against the hosted project on 21 October 2026. It passed current-schema checks for MCP create idempotency and changed-payload rejection, completion retry, habit creation, cross-user RLS and RPC update isolation, current token ownership semantics, refresh failure isolation, and anonymous task-write denial. It confirmed authenticated direct occurrence `INSERT` is still granted while `20261021090000` remains pending. A separate read-only postcheck found zero acceptance users, tasks, goals, occurrences, schedules, or tokens; both Vault credential rows were present again after rollback.
 
-**Full hosted suite: not run.** The CLI needed to apply the four repository versions is not installed or linked in this checkout, and no CLI access token or database password is configured. The available MCP `apply_migration` operation creates its own migration version, so it cannot faithfully apply these existing repository versions. Do not substitute it or repair migration history manually. Continue with the linked Supabase CLI migration workflow once CLI authentication is available; then run `supabase/acceptance_database.sql`. Afterward, use a separate read-only query to confirm zero `vanta-acceptance-%@example.invalid` auth users, `VANTA_ACCEPTANCE_` task/goal titles, related occurrences/schedules/goal links, completion requests for those users, and token strings with that prefix. The full suite has not been called PASS.
+**Full hosted rollback acceptance: PASS.** `npx --yes supabase db query --linked --file supabase/acceptance_database.sql` exited successfully on 21 October 2026. Every assertion in the transaction ran before its final `ROLLBACK`:
 
-The pre-rollout security advisor reported 11 intentionally authenticated `SECURITY DEFINER` RPCs and one Auth warning for disabled leaked-password protection. The post-migration advisor review has not run because the migrations have not been applied.
+| Assertion | Result |
+|---|---|
+| Anonymous task mutation denied | PASS |
+| Cross-user task, goal, goal-link, and habit isolation | PASS |
+| Direct authenticated occurrence `INSERT`, `UPDATE`, and `DELETE` denied | PASS |
+| Habit creation and occurrence materialization | PASS |
+| Duplicate materialization remains idempotent | PASS |
+| Habit schedule update succeeds and completed history is preserved | PASS |
+| Cross-user materialization and schedule update denied | PASS |
+| MCP create replay succeeds; same operation ID with changed payload rejected | PASS |
+| MCP completion replay succeeds | PASS |
+| Lost-response Android completion replay succeeds | PASS |
+| Missing occurrence is classified as permanent `P0002` | PASS |
+| Same-owner token registration and duplicate registration are idempotent | PASS |
+| Active foreign-owner token takeover rejected | PASS |
+| Disabled token reassignment allowed | PASS |
+| Task mutation survives missing refresh credentials | PASS |
+
+The first acceptance attempt exposed an assertion that tried a direct `goals` update even though the deployed grants migration deliberately revokes goal-table writes. The test now accepts either that ACL denial or a zero-row RLS result and still fails if a cross-user row changes. The successful rerun left zero acceptance users, tasks, goals, occurrences, schedules, goal links, completion requests, MCP operation rows, or acceptance device tokens. Both expected Vault rows were present after rollback.
+
+The deployed `mcp` function advanced from v5 to v6 with `verify_jwt=false`. An unauthenticated MCP initialize request returned HTTP 401 with `MISSING_CREDENTIALS`. A live authenticated MCP request requires the owner's OAuth bearer token and was not run in this checkout; the SQL acceptance did exercise the authenticated habit-create and materialization path.
+
+The post-rollout security advisor reports 12 authenticated `SECURITY DEFINER` RPC warnings and one Auth warning for disabled leaked-password protection. All 12 RPCs are intentionally callable by authenticated users, check `auth.uid()` directly or through `private.begin_mcp_operation`, enforce owner identity, use controlled `search_path` values, deny `anon` and `PUBLIC` execution, and are covered by the reviewed SQL/source checks. These lints are accepted design warnings. Leaked-password protection remains disabled; this is accepted for the passwordless V1 sign-in flow and should be revisited if password authentication is enabled.
 
 ## Real V1 acceptance status
 
 | Handoff | Status | Evidence / remaining work |
 |---|---|---|
 | ChatGPT → MCP | BLOCKED | Owner OAuth linking is not complete. |
-| MCP → Supabase | PARTIAL | Authenticated function deployment exists, but the changed MCP habit flow has not been exercised against the new migration. |
-| Supabase → FCM | PARTIAL | FCM credentials/token exchange were previously checked; no owner phone token is registered. |
+| MCP → Supabase | PARTIAL | MCP v6 is deployed and database acceptance passed; a live authenticated MCP call awaits owner OAuth. |
+| Supabase → FCM | PARTIAL | Refresh signaling is best effort; no owner phone token is registered. |
 | FCM → Android | BLOCKED | Closed-app delivery has not been tested on the owner phone. |
 | Android → Room | PARTIAL | Room instrumentation tests pass; no owner account sync has run. |
 | Room → Widget | PARTIAL | Widget feed tests pass; no live task has appeared on the owner widget. |
@@ -88,16 +112,29 @@ The pre-rollout security advisor reported 11 intentionally authenticated `SECURI
 | Offline queue → Supabase | PARTIAL | Replay policies and SQL acceptance are authored; real database acceptance and owner replay remain pending. |
 | Supabase → ChatGPT | BLOCKED | Owner OAuth and post-completion ChatGPT query remain pending. |
 
-The newest available `system-consent` production deployment is READY but was created on 17 October 2026 from the Vercel CLI and carries no Git commit metadata for the 21 October source. The manual deployment workflow requires the `VERCEL_TOKEN` repository secret; the current consent source has not been verified as deployed.
+The newest `system-consent` production deployment is READY, was created on 17 October 2026, and has no Git commit metadata. It does not verify the current consent source. The manual deployment workflow requires the `VERCEL_TOKEN` repository secret. **USER ACTION REQUIRED — VERCEL_TOKEN:** add the secret, then run the existing production deployment workflow from `main` and verify the deployment is READY.
 
 ## Owner acceptance after database rollout
 
-1. Deploy the consent site if its Vercel deployment is still pending.
-2. Install the latest Firebase-configured APK from `android/app/build/outputs/apk/debug/app-debug.apk`.
-3. Sign into Vanta and confirm the device token is enabled under the owner in `device_tokens`.
-4. Place the Vanta widget on the phone home screen.
-5. Connect ChatGPT Developer mode to `https://<project-ref>.supabase.co/functions/v1/mcp` and complete OAuth as the same Supabase user.
-6. With Vanta closed, ask ChatGPT: “Add 50 push-ups tomorrow”. Verify one task and one occurrence in Supabase and then verify the item appears in the widget.
-7. Turn off the phone's network, tap **Done** in the widget, and verify the task disappears locally and its stable completion key remains queued after killing and reopening Vanta.
-8. Reconnect, wait for replay, and verify Supabase marks the occurrence complete and Room clears the queue item.
-9. Ask ChatGPT: “What do I have tomorrow?” and verify the completed item is no longer pending.
+1. Install latest APK.
+2. Open Vanta.
+3. Sign in with owner account.
+4. Confirm dashboard loads.
+5. Verify owner FCM token appears in Supabase.
+6. Add Vanta widget to home screen.
+7. Close Vanta.
+8. Connect the Vanta MCP in ChatGPT.
+9. Complete OAuth using the SAME Supabase account.
+10. Tell ChatGPT: “Add 50 push-ups tomorrow.”
+11. Verify exactly one task and one occurrence exist.
+12. Verify it appears on the widget while Vanta is closed.
+13. Turn phone network off.
+14. Tap Done in the widget.
+15. Verify immediate local disappearance.
+16. Force-stop Vanta.
+17. Restore network.
+18. Allow sync/reopen if necessary.
+19. Verify queue clears.
+20. Verify Supabase occurrence is completed.
+21. Ask ChatGPT: “What do I have tomorrow?”
+22. Confirm completed item is not returned as pending.
