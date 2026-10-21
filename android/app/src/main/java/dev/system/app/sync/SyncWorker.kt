@@ -16,25 +16,37 @@ import kotlinx.coroutines.withContext
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork() = withContext(Dispatchers.IO) {
         val app = applicationContext as SystemApplication
+        syncRequestGate.workerStarted()
         try {
-            app.awaitRepository().syncNow()
-            Result.success()
+            val result = app.awaitRepository().syncNow()
+            if (result.retryablePending) Result.retry() else Result.success()
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
             Result.retry()
+        } finally {
+            syncRequestGate.workerFinished { enqueueWork(applicationContext) }
         }
     }
 
     companion object {
         const val PERIODIC_NAME = "system-periodic-sync"
         const val IMMEDIATE_NAME = "system-immediate-sync"
+        private val syncRequestGate = SyncRequestGate()
+
         fun enqueue(context: Context) {
+            syncRequestGate.request { enqueueWork(context) }
+        }
+
+        private fun enqueueWork(context: Context) {
             val request = OneTimeWorkRequestBuilder<SyncWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            // A refresh that arrives during a running sync must trigger another fetch.
-            WorkManager.getInstance(context).enqueueUniqueWork(IMMEDIATE_NAME, ExistingWorkPolicy.REPLACE, request)
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                IMMEDIATE_NAME,
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                request,
+            )
         }
     }
 }

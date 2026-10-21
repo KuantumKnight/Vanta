@@ -58,12 +58,16 @@ class SystemDaoOfflineQueueTest {
             request,
             occurrence.copy(status = "completed", completedAt = "2026-09-24T12:00:00Z"),
         )
+        database.systemDao().markCompletionAttempt("user-a", request.idempotencyKey, 1_790_280_000_100L)
         database.close()
 
         database = openDatabase()
         val dao = database.systemDao()
         assertEquals("completed", dao.occurrence("user-a", occurrence.id)?.status)
-        assertEquals(listOf(request), dao.pendingCompletions("user-a"))
+        val restored = dao.pendingCompletions("user-a").single()
+        assertEquals(request.idempotencyKey, restored.idempotencyKey)
+        assertEquals("PENDING", restored.state)
+        assertEquals(1_790_280_000_100L, restored.lastAttemptAt)
         assertTrue(dao.pendingCompletions("user-b").isEmpty())
 
         dao.removePendingCompletion("user-a", request.idempotencyKey)
@@ -103,6 +107,73 @@ class SystemDaoOfflineQueueTest {
         assertTrue(dao.queueCompletion(first, occurrence.copy(status = "completed")))
         assertEquals(false, dao.queueCompletion(duplicate, occurrence.copy(status = "completed")))
         assertEquals(listOf(first), dao.pendingCompletions("user-a"))
+    }
+
+    @Test
+    fun permanentFailureAIsDeadLetteredAndDoesNotBlockValidB() = runBlocking {
+        val dao = database.systemDao()
+        val a = occurrence("permanent-a", "user-a")
+        val b = occurrence("valid-b", "user-a")
+        val itemA = PendingCompletion("stable-a", "user-a", a.id, queuedAt = 1)
+        val itemB = PendingCompletion("stable-b", "user-a", b.id, queuedAt = 2)
+        dao.queueCompletion(itemA, a.copy(status = "completed"))
+        dao.queueCompletion(itemB, b.copy(status = "completed"))
+
+        dao.setCompletionOutcome(
+            userId = "user-a",
+            key = itemA.idempotencyKey,
+            state = "PERMANENT_FAILURE",
+            retryCount = 0,
+            attemptedAt = 10,
+            nextAttemptAt = null,
+            errorCode = "P0002",
+            message = "Task occurrence not found",
+        )
+
+        assertEquals(listOf(itemB), dao.eligibleCompletions("user-a", now = 10))
+        assertEquals("PERMANENT_FAILURE", dao.pendingCompletions("user-a").first().state)
+        assertEquals("stable-a", dao.pendingCompletions("user-a").first().idempotencyKey)
+    }
+
+    @Test
+    fun retryableFailureTracksBackoffAndKeepsOperationKey() = runBlocking {
+        val dao = database.systemDao()
+        val row = occurrence("retryable", "user-a")
+        val item = PendingCompletion("stable-retry-key", "user-a", row.id)
+        dao.queueCompletion(item, row.copy(status = "completed"))
+        dao.setCompletionOutcome(
+            userId = "user-a",
+            key = item.idempotencyKey,
+            state = "RETRYABLE",
+            retryCount = 1,
+            attemptedAt = 100,
+            nextAttemptAt = 200,
+            errorCode = "503",
+            message = "Temporary sync problem",
+        )
+
+        assertTrue(dao.eligibleCompletions("user-a", now = 199).isEmpty())
+        val due = dao.eligibleCompletions("user-a", now = 200).single()
+        assertEquals(item.idempotencyKey, due.idempotencyKey)
+        assertEquals(1, due.retryCount)
+        assertEquals("RETRYABLE", due.state)
+    }
+
+    @Test
+    fun authFailureRetainsQueueUntilLaterAuthenticatedReplay() = runBlocking {
+        val dao = database.systemDao()
+        val row = occurrence("auth-required", "user-a")
+        val item = PendingCompletion("stable-auth-key", "user-a", row.id)
+        dao.queueCompletion(item, row.copy(status = "completed"))
+
+        dao.markCompletionsAuthRequired("user-a", 50, "Sign in again to sync this saved completion.")
+
+        val retained = dao.pendingCompletions("user-a").single()
+        assertEquals(item.idempotencyKey, retained.idempotencyKey)
+        assertEquals("AUTH_REQUIRED", retained.state)
+        // The repository does not request eligible queue items until a remote
+        // authenticated identity is available again.
+        assertEquals("stable-auth-key", dao.eligibleCompletions("user-a", now = 100).single().idempotencyKey)
     }
 
     @Test
@@ -156,6 +227,7 @@ class SystemDaoOfflineQueueTest {
         }
         assertEquals("", dao.legacyPendingCompletions().single().userId)
         assertEquals("legacy-key", dao.legacyPendingCompletions().single().idempotencyKey)
+        assertEquals("PENDING", dao.legacyPendingCompletions().single().state)
 
         // Production claims a legacy queue item only after its occurrence is
         // visible through the currently authenticated user's RLS policy.
@@ -183,6 +255,7 @@ class SystemDaoOfflineQueueTest {
             SystemDatabase.MIGRATION_1_2,
             SystemDatabase.MIGRATION_2_3,
             SystemDatabase.MIGRATION_3_4,
+            SystemDatabase.MIGRATION_4_5,
         )
         .build()
 }

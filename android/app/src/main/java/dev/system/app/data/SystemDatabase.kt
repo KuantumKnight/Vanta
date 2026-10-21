@@ -45,6 +45,9 @@ interface SystemDao {
     @Query("SELECT * FROM pending_completions WHERE user_id = :userId ORDER BY queuedAt ASC")
     suspend fun pendingCompletions(userId: String): List<PendingCompletion>
 
+    @Query("SELECT * FROM pending_completions WHERE user_id = :userId AND state IN ('PENDING', 'RETRYABLE', 'AUTH_REQUIRED') AND (nextAttemptAt IS NULL OR nextAttemptAt <= :now) ORDER BY queuedAt ASC")
+    suspend fun eligibleCompletions(userId: String, now: Long): List<PendingCompletion>
+
     @Query("SELECT occurrenceId FROM pending_completions WHERE user_id = :userId")
     suspend fun queuedOccurrenceIds(userId: String): List<String>
 
@@ -57,8 +60,23 @@ interface SystemDao {
     @Query("DELETE FROM pending_completions WHERE user_id = :userId AND idempotencyKey = :key")
     suspend fun removePendingCompletion(userId: String, key: String)
 
-    @Query("UPDATE pending_completions SET lastError = :message WHERE user_id = :userId AND idempotencyKey = :key")
-    suspend fun setCompletionError(userId: String, key: String, message: String)
+    @Query("UPDATE pending_completions SET lastAttemptAt = :attemptedAt WHERE user_id = :userId AND idempotencyKey = :key")
+    suspend fun markCompletionAttempt(userId: String, key: String, attemptedAt: Long)
+
+    @Query("UPDATE pending_completions SET state = :state, retryCount = :retryCount, lastAttemptAt = :attemptedAt, nextAttemptAt = :nextAttemptAt, lastErrorCode = :errorCode, lastError = :message WHERE user_id = :userId AND idempotencyKey = :key")
+    suspend fun setCompletionOutcome(
+        userId: String,
+        key: String,
+        state: String,
+        retryCount: Int,
+        attemptedAt: Long,
+        nextAttemptAt: Long?,
+        errorCode: String?,
+        message: String?,
+    )
+
+    @Query("UPDATE pending_completions SET state = 'AUTH_REQUIRED', lastAttemptAt = :attemptedAt, nextAttemptAt = NULL, lastErrorCode = 'AUTH_REQUIRED', lastError = :message WHERE user_id = :userId AND state IN ('PENDING', 'RETRYABLE', 'AUTH_REQUIRED')")
+    suspend fun markCompletionsAuthRequired(userId: String, attemptedAt: Long, message: String)
 
     @Query("DELETE FROM cached_occurrences WHERE user_id = :userId AND id NOT IN (SELECT occurrenceId FROM pending_completions WHERE user_id = :userId)")
     suspend fun clearSnapshotExceptQueued(userId: String)
@@ -78,7 +96,7 @@ interface SystemDao {
 
 }
 
-@Database(entities = [CachedOccurrence::class, PendingCompletion::class], version = 4, exportSchema = false)
+@Database(entities = [CachedOccurrence::class, PendingCompletion::class], version = 5, exportSchema = false)
 abstract class SystemDatabase : RoomDatabase() {
     abstract fun systemDao(): SystemDao
 
@@ -109,6 +127,20 @@ abstract class SystemDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE UNIQUE INDEX IF NOT EXISTS index_pending_completions_user_id_occurrenceId " +
                         "ON pending_completions(user_id, occurrenceId)",
+                )
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE pending_completions ADD COLUMN state TEXT NOT NULL DEFAULT 'PENDING'")
+                db.execSQL("ALTER TABLE pending_completions ADD COLUMN retryCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE pending_completions ADD COLUMN lastAttemptAt INTEGER")
+                db.execSQL("ALTER TABLE pending_completions ADD COLUMN nextAttemptAt INTEGER")
+                db.execSQL("ALTER TABLE pending_completions ADD COLUMN lastErrorCode TEXT")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_pending_completions_user_id_state_nextAttemptAt " +
+                        "ON pending_completions(user_id, state, nextAttemptAt)",
                 )
             }
         }

@@ -24,6 +24,7 @@ data class CachedOccurrence(
     indices = [
         Index(value = ["user_id", "queuedAt"]),
         Index(value = ["user_id", "occurrenceId"], unique = true),
+        Index(value = ["user_id", "state", "nextAttemptAt"]),
     ],
 )
 data class PendingCompletion(
@@ -32,4 +33,9 @@ data class PendingCompletion(
     val occurrenceId: String,
     val queuedAt: Long = System.currentTimeMillis(),
     val lastError: String? = null,
+    @ColumnInfo(defaultValue = "'PENDING'") val state: String = "PENDING",
+    @ColumnInfo(defaultValue = "0") val retryCount: Int = 0,
+    val lastAttemptAt: Long? = null,
+    val nextAttemptAt: Long? = null,
+    val lastErrorCode: String? = null,
 )

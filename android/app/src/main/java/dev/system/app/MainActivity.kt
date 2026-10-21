@@ -690,6 +690,17 @@ private fun SyncSummary(syncing: Boolean, error: String?, lastSyncedAt: String?,
 
 @Composable
 private fun CompletionQueueCard(items: List<PendingCompletion>, onRetry: () -> Unit) {
+    val needsReview = items.firstOrNull { it.state == "PERMANENT_FAILURE" || it.state == "CONFLICT" }
+    val requiresSignIn = items.any { it.state == "AUTH_REQUIRED" }
+    val retryable = items.any { it.state == "PENDING" || it.state == "RETRYABLE" }
+    val canRetry = requiresSignIn || retryable
+    val summary = when {
+        requiresSignIn -> "Sign in again to sync. The saved completions remain on this phone."
+        needsReview != null -> needsReview.lastError ?: "This completion needs review before it can be applied."
+        retryable -> items.firstOrNull { it.state == "RETRYABLE" }?.lastError
+            ?: "A temporary sync issue will retry automatically."
+        else -> "Saved on this phone"
+    }
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
@@ -700,19 +711,18 @@ private fun CompletionQueueCard(items: List<PendingCompletion>, onRetry: () -> U
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    items.size.toString() + " completion" + (if (items.size == 1) "" else "s") + " waiting to sync",
+                    items.size.toString() + " saved completion" + (if (items.size == 1) "" else "s"),
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
                 Text(
-                    if (items.any { it.lastError != null }) "A saved change needs another try."
-                    else "Saved on this phone",
+                    summary,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     maxLines = 2,
                 )
             }
-            TextButton(onClick = onRetry) { Text("Retry") }
+            if (canRetry) TextButton(onClick = onRetry) { Text("Retry") }
         }
     }
 }

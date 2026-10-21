@@ -39,11 +39,6 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import androidx.glance.Button
-import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import dev.system.app.MainActivity
 import dev.system.app.SystemApplication
 import dev.system.app.data.CachedOccurrence
@@ -181,10 +176,7 @@ class CompleteOccurrenceAction : ActionCallback {
         val occurrenceId = parameters[occurrenceKey] ?: return
         val app = context.applicationContext as SystemApplication
         app.awaitRepository().queueCompletion(occurrenceId)
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .build()
-        WorkManager.getInstance(context).enqueueUniqueWork("system-complete-$occurrenceId", ExistingWorkPolicy.REPLACE, request)
+        SyncWorker.enqueue(context)
         SystemWidget().updateAll(context)
     }
 }

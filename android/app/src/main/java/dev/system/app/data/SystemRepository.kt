@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.Intent
 import dev.system.app.BuildConfig
 import dev.system.app.widget.SystemWidget
+import dev.system.app.sync.CompletionReplayOutcome
+import dev.system.app.sync.CompletionReplayPolicy
+import dev.system.app.sync.SyncWorker
 import androidx.glance.appwidget.updateAll
 import com.google.firebase.FirebaseApp
 import io.github.jan.supabase.SupabaseClient
@@ -65,14 +68,11 @@ class SystemRepository(private val context: Context, private val database: Syste
 
     val currentUser get() = client.auth.currentUserOrNull()
     val isAuthenticated = client.auth.sessionStatus.map { status ->
-        when (status) {
-            SessionStatus.Initializing -> null
-            is SessionStatus.Authenticated -> true
-            is SessionStatus.NotAuthenticated, is SessionStatus.RefreshFailure -> false
-        }
+        if (status == SessionStatus.Initializing) return@map null
+        cacheUserId(status) != null
     }
     private val activeUserId = client.auth.sessionStatus.map { status ->
-        if (status is SessionStatus.Authenticated) currentUser?.id else null
+        cacheUserId(status)
     }.distinctUntilChanged()
     val pendingOccurrences: Flow<List<CachedOccurrence>> = activeUserId.flatMapLatest { userId ->
         if (userId == null) flowOf(emptyList()) else dao.observePending(userId)
@@ -134,12 +134,14 @@ class SystemRepository(private val context: Context, private val database: Syste
 
         unregisterFcmTokens()
         client.auth.signOut()
+        context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+            .edit().remove(LOCAL_USER_ID_PREFERENCE).apply()
         dao.clearOccurrences(userId)
         SystemWidget().updateAll(context)
     }
 
     suspend fun complete(occurrenceId: String) = syncMutex.withLock {
-        val userId = requireAuthenticatedUserId()
+        val userId = requireLocalUserId()
         val row = dao.occurrence(userId, occurrenceId) ?: return@withLock
         if (row.status != "pending") return@withLock
         val key = UUID.randomUUID().toString()
@@ -149,7 +151,8 @@ class SystemRepository(private val context: Context, private val database: Syste
         )
         SystemWidget().updateAll(context)
         try {
-            syncLocked()
+            val result = syncLocked()
+            if (result.retryablePending) SyncWorker.enqueue(context)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
@@ -159,7 +162,7 @@ class SystemRepository(private val context: Context, private val database: Syste
     }
 
     suspend fun queueCompletion(occurrenceId: String) = syncMutex.withLock {
-        val userId = requireAuthenticatedUserId()
+        val userId = requireLocalUserId()
         val row = dao.occurrence(userId, occurrenceId) ?: return@withLock
         if (row.status != "pending") return@withLock
         dao.queueCompletion(
@@ -170,18 +173,29 @@ class SystemRepository(private val context: Context, private val database: Syste
     }
 
     suspend fun pendingSnapshotForCurrentUser(): List<CachedOccurrence> {
-        val userId = authenticatedUserId(loadFromStorage = true) ?: return emptyList()
+        val userId = localUserId(loadFromStorage = true) ?: return emptyList()
         return dao.pendingSnapshot(userId)
     }
 
-    suspend fun syncNow() = syncMutex.withLock { syncLocked() }
+    suspend fun syncNow(): SyncResult = syncMutex.withLock { syncLocked() }
 
-    private suspend fun syncLocked() {
-        withContext(Dispatchers.IO) {
+    private suspend fun syncLocked(): SyncResult {
+        return withContext(Dispatchers.IO) {
             val userId = authenticatedUserId(loadFromStorage = true)
             if (userId == null) {
-                mutableSyncState.value = SyncState(syncing = false)
-                return@withContext
+                val localUserId = localUserId(loadFromStorage = false)
+                if (localUserId != null) {
+                    dao.markCompletionsAuthRequired(
+                        localUserId,
+                        System.currentTimeMillis(),
+                        "Sign in again to sync this saved completion.",
+                    )
+                }
+                mutableSyncState.value = SyncState(
+                    syncing = false,
+                    error = if (localUserId == null) null else "Sign in again to sync. Saved tasks remain available on this phone.",
+                )
+                return@withContext SyncResult(authRequired = localUserId != null)
             }
             mutableSyncState.value = mutableSyncState.value.copy(syncing = true, error = null)
             try {
@@ -194,8 +208,11 @@ class SystemRepository(private val context: Context, private val database: Syste
                         .isNotEmpty()
                     if (visibleToCurrentUser) dao.adoptLegacyCompletion(userId, item.idempotencyKey)
                 }
-                val queued = dao.pendingCompletions(userId)
+                val queued = dao.eligibleCompletions(userId, System.currentTimeMillis())
+                var authRequired = false
                 for (item in queued) {
+                    val attemptedAt = System.currentTimeMillis()
+                    dao.markCompletionAttempt(userId, item.idempotencyKey, attemptedAt)
                     try {
                         client.postgrest.rpc(
                             "complete_task_occurrence",
@@ -203,9 +220,55 @@ class SystemRepository(private val context: Context, private val database: Syste
                         )
                         dao.removePendingCompletion(userId, item.idempotencyKey)
                     } catch (error: Throwable) {
-                        dao.setCompletionError(userId, item.idempotencyKey, "Could not sync completion yet")
-                        throw error
+                        if (error is CancellationException) throw error
+                        val failure = CompletionReplayPolicy.describe(error)
+                        val outcome = CompletionReplayPolicy.classify(failure)
+                        if (outcome == CompletionReplayOutcome.ALREADY_APPLIED || outcome == CompletionReplayOutcome.SUCCESS) {
+                            dao.removePendingCompletion(userId, item.idempotencyKey)
+                            continue
+                        }
+
+                        val retryable = outcome == CompletionReplayOutcome.RETRYABLE
+                        val nextAttemptAt = if (retryable) {
+                            attemptedAt + CompletionReplayPolicy.retryDelayMillis(item.retryCount + 1)
+                        } else {
+                            null
+                        }
+                        val errorCode = failure.code ?: failure.status?.toString() ?: when (outcome) {
+                            CompletionReplayOutcome.AUTH_REQUIRED -> "AUTH_REQUIRED"
+                            CompletionReplayOutcome.RETRYABLE -> "RETRYABLE"
+                            CompletionReplayOutcome.PERMANENT_FAILURE -> "PERMANENT_FAILURE"
+                            CompletionReplayOutcome.CONFLICT -> "CONFLICT"
+                            else -> null
+                        }
+                        dao.setCompletionOutcome(
+                            userId = userId,
+                            key = item.idempotencyKey,
+                            state = outcome.name,
+                            retryCount = item.retryCount + if (retryable) 1 else 0,
+                            attemptedAt = attemptedAt,
+                            nextAttemptAt = nextAttemptAt,
+                            errorCode = errorCode,
+                            message = CompletionReplayPolicy.userMessage(outcome, failure),
+                        )
+                        if (outcome == CompletionReplayOutcome.AUTH_REQUIRED) {
+                            dao.markCompletionsAuthRequired(
+                                userId,
+                                attemptedAt,
+                                CompletionReplayPolicy.userMessage(outcome, failure),
+                            )
+                            authRequired = true
+                            break
+                        }
                     }
+                }
+
+                if (authRequired) {
+                    mutableSyncState.value = SyncState(
+                        syncing = false,
+                        error = "Sign in again to sync. Saved tasks remain available on this phone.",
+                    )
+                    return@withContext SyncResult(authRequired = true)
                 }
 
                 val columns = Columns.raw(OCCURRENCE_SELECT)
@@ -226,8 +289,23 @@ class SystemRepository(private val context: Context, private val database: Syste
                 dao.clearLegacyOccurrences()
                 registerFcmToken()
                 SystemWidget().updateAll(context)
-                mutableSyncState.value = SyncState(syncing = false, lastSyncedAt = Instant.now().toString())
+                val savedCompletions = dao.pendingCompletions(userId)
+                val retryablePending = savedCompletions.any { it.state == "PENDING" || it.state == "RETRYABLE" }
+                val needsReview = savedCompletions.firstOrNull {
+                    it.state == "PERMANENT_FAILURE" || it.state == "CONFLICT"
+                }
+                mutableSyncState.value = SyncState(
+                    syncing = false,
+                    error = when {
+                        needsReview != null -> "A saved completion needs review."
+                        retryablePending -> "Some saved completions are waiting to retry."
+                        else -> null
+                    },
+                    lastSyncedAt = Instant.now().toString(),
+                )
+                return@withContext SyncResult(retryablePending = retryablePending)
             } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 mutableSyncState.value = mutableSyncState.value.copy(
                     syncing = false,
                     error = "Could not sync tasks.",
@@ -245,7 +323,35 @@ class SystemRepository(private val context: Context, private val database: Syste
         client.auth.awaitInitialization()
         if (loadFromStorage && currentUser == null) client.auth.loadFromStorage(autoRefresh = false)
         if (client.auth.sessionStatus.value !is SessionStatus.Authenticated) return null
-        return currentUser?.id
+        return currentUser?.id?.also(::rememberLocalUserId)
+    }
+
+    private suspend fun requireLocalUserId(): String =
+        localUserId(loadFromStorage = true)
+            ?: throw IllegalStateException("Sign in to access your SYSTEM tasks.")
+
+    private suspend fun localUserId(loadFromStorage: Boolean): String? {
+        client.auth.awaitInitialization()
+        if (loadFromStorage && currentUser == null) client.auth.loadFromStorage(autoRefresh = false)
+        return cacheUserId(client.auth.sessionStatus.value)
+    }
+
+    private fun cacheUserId(status: SessionStatus): String? {
+        val identityState = when (status) {
+            is SessionStatus.Authenticated -> RemoteIdentityState.AUTHENTICATED
+            is SessionStatus.RefreshFailure -> RemoteIdentityState.REFRESH_FAILURE
+            SessionStatus.Initializing, is SessionStatus.NotAuthenticated -> RemoteIdentityState.OTHER
+        }
+        return LocalCacheIdentity.userId(identityState, currentUser?.id, savedLocalUserId())
+            ?.also { if (identityState != RemoteIdentityState.OTHER) rememberLocalUserId(it) }
+    }
+
+    private fun savedLocalUserId(): String? = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .getString(LOCAL_USER_ID_PREFERENCE, null)
+
+    private fun rememberLocalUserId(userId: String) {
+        context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+            .edit().putString(LOCAL_USER_ID_PREFERENCE, userId).apply()
     }
 
     suspend fun loadGoals(): List<GoalProgress> = client.from("goal_progress")
@@ -319,6 +425,8 @@ class SystemRepository(private val context: Context, private val database: Syste
         private const val AUTH_HOST = "auth"
         private const val AUTH_REDIRECT_URI = "$AUTH_SCHEME://$AUTH_HOST"
         private const val FCM_TOKENS_PREFERENCE = "registered_fcm_tokens"
+        private const val PREFERENCES_NAME = "system"
+        private const val LOCAL_USER_ID_PREFERENCE = "local_cache_user_id"
     }
 }
 
@@ -328,6 +436,11 @@ data class SyncState(
     val syncing: Boolean = true,
     val error: String? = null,
     val lastSyncedAt: String? = null,
+)
+
+data class SyncResult(
+    val retryablePending: Boolean = false,
+    val authRequired: Boolean = false,
 )
 
 @Serializable

@@ -55,6 +55,7 @@ class SystemApplication : Application() {
                         SystemDatabase.MIGRATION_1_2,
                         SystemDatabase.MIGRATION_2_3,
                         SystemDatabase.MIGRATION_3_4,
+                        SystemDatabase.MIGRATION_4_5,
                     ).build()
                     val repository = SystemRepository(applicationContext, database)
                     mutableStartup.value = StartupState.Ready(database, repository)
