@@ -40,7 +40,7 @@ class FocusSessionStoreTest {
         val persistence = InMemoryFocusSessionPersistence()
         val store = FocusSessionStore(persistence) { 1_000L }
         val first = store.start("user-1", occurrence("occ-1"), plannedDurationSeconds = 300L)
-        val second = store.start("user-2", occurrence("occ-2"), plannedDurationSeconds = 600L)
+        val second = store.start("user-2", occurrence("occ-2", userId = "user-2"), plannedDurationSeconds = 600L)
 
         assertEquals(first, store.activeSession("user-1"))
         assertEquals(second, store.activeSession("user-2"))
@@ -51,7 +51,11 @@ class FocusSessionStoreTest {
         val persistence = InMemoryFocusSessionPersistence()
         val store = FocusSessionStore(persistence) { 1_000L }
         val first = store.start("user-1", occurrence("local:operation-1"), plannedDurationSeconds = 300L)
-        val second = store.start("user-2", occurrence("local:operation-1"), plannedDurationSeconds = 300L)
+        val second = store.start(
+            "user-2",
+            occurrence("local:operation-1", userId = "user-2"),
+            plannedDurationSeconds = 300L,
+        )
 
         assertEquals(true, store.reconcileOccurrenceId("user-1", "local:operation-1", "server-occurrence"))
         assertEquals("server-occurrence", FocusSessionStore(persistence).activeSession("user-1")?.occurrenceId)
@@ -80,7 +84,7 @@ class FocusSessionStoreTest {
         assertThrows(IllegalStateException::class.java) { store.complete("user-1", 1_000L) }
     }
 
-    private fun occurrence(id: String = "occ-1") = CachedOccurrence(
+    private fun occurrence(id: String = "occ-1", userId: String = "user-1") = CachedOccurrence(
         id = id,
         taskId = "task-$id",
         title = "Study",
@@ -90,7 +94,7 @@ class FocusSessionStoreTest {
         kind = "task",
         status = "pending",
         completedAt = null,
-        userId = "user-1",
+        userId = userId,
         durationMinutes = null,
     )
 }

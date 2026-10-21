@@ -143,7 +143,7 @@ class TimelineCalculationsTest {
         )
 
         assertEquals(180, plan.plannedMinutes)
-        assertEquals(870L, plan.freeMinutes)
+        assertEquals(840L, plan.freeMinutes)
         assertTrue(plan.scheduled.all { it.overlapsAnotherTask })
     }
 

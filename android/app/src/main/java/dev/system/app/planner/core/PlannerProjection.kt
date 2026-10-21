@@ -47,7 +47,8 @@ fun buildDaySchedule(
         .filter { task ->
             val hasConstraint = task.deadlineAt != null || task.earliestStart != null ||
                 task.latestEnd != null || task.preferredStart != null
-            val windowRelevant = (task.earliestStart == null || task.earliestStart < dayEnd) &&
+            val windowRelevant = (task.earliestStart != null || task.latestEnd != null) &&
+                (task.earliestStart == null || task.earliestStart < dayEnd) &&
                 (task.latestEnd == null || task.latestEnd >= dayStart)
             val deadlineRelevant = task.deadlineAt?.let { it >= dayStart && it < dayEnd } == true
             val preferredRelevant = task.preferredStart?.let { it >= dayStart && it < dayEnd } == true

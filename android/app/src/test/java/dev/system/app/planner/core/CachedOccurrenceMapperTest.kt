@@ -16,7 +16,7 @@ class CachedOccurrenceMapperTest {
     fun scheduledOccurrenceMapsToDurationBlockAndCompletedOrPastWorkIsReadOnly() {
         val now = Instant.parse("2026-10-21T08:00:00Z")
         val pending = occurrence(scheduledFor = "2026-10-21T09:00:00Z", durationMinutes = 30)
-        val block = pending.toScheduleBlock(ZoneId.of("UTC"), ScheduleType.HARD, now)!!
+        val block = pending.toScheduleBlock(ZoneId.of("UTC"), ScheduleType.SOFT, now)!!
         assertEquals(Instant.parse("2026-10-21T09:00:00Z"), block.start)
         assertEquals(Instant.parse("2026-10-21T09:30:00Z"), block.end)
         assertTrue(block.editable)

@@ -125,7 +125,11 @@ fun findCandidateSlots(
             candidate = candidate.plus(snapMinutes.toLong(), ChronoUnit.MINUTES)
         }
     }
-    return slots.sortedWith(compareByDescending<CandidateSlot> { it.score }.thenBy { it.start })
+    return slots.sortedWith(
+        compareByDescending<CandidateSlot> { it.score }
+            .thenBy { slot -> task.preferredStart?.let { abs(ChronoUnit.MINUTES.between(it, slot.start)) } ?: 0L }
+            .thenBy { it.start },
+    )
         .take(maxCandidates)
 }
 
@@ -167,10 +171,9 @@ fun scoreCandidate(
 
     val leftGap = ChronoUnit.MINUTES.between(freeInterval.start, start).coerceAtLeast(0)
     val rightGap = ChronoUnit.MINUTES.between(end, freeInterval.end).coerceAtLeast(0)
-    val splitPenalty = if (leftGap > 0 && rightGap > 0) 40 else 0
+    val splitPenalty = if (leftGap > 0 && rightGap > 0) 20 else 0
     val tinyGapPenalty = listOf(leftGap, rightGap).count { it in 1L..29L } * 30
-    val fitBonus = if (leftGap == 0L || rightGap == 0L) 30 else 0
-    val fragmentationScore = (60 + fitBonus - splitPenalty - tinyGapPenalty).coerceAtLeast(0)
+    val fragmentationScore = (60 - splitPenalty - tinyGapPenalty).coerceAtLeast(0)
     reasons += "Gap fragmentation (+$fragmentationScore)"
 
     val total = priorityScore + slackScore + preferenceScore + fragmentationScore

@@ -127,6 +127,8 @@ dependencies {
     baselineProfile(project(":benchmark"))
 
     testImplementation("junit:junit:4.13.2")
+    // Local JVM tests otherwise resolve Android's org.json stubs, whose methods are unimplemented.
+    testImplementation("org.json:json:20260814")
 
     androidTestImplementation("androidx.room:room-testing:2.8.5")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

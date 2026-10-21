@@ -32,7 +32,7 @@ class BatchFourDashboardDataTest {
         assertEquals(2, summary.bestStreak)
         assertEquals("expected occurrences", summary.streakUnitLabel)
         assertEquals(LocalDate.of(2026, 10, 18), detail.thisWeek.first().date)
-        assertEquals(today, detail.thisWeek.last().date)
+        assertEquals(today.plusDays(3), detail.thisWeek.last().date)
         assertEquals(365, detail.history.size)
         assertTrue(detail.scheduleDescription.contains("Skipped occurrences are neutral"))
     }

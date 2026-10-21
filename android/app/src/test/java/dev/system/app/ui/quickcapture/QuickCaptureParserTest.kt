@@ -1,5 +1,6 @@
 package dev.system.app.ui.quickcapture
 
+import dev.system.app.planner.ScheduleType
 import dev.system.app.ui.components.TaskTimeZone
 import java.time.Instant
 import java.time.LocalDate
@@ -124,6 +125,7 @@ class QuickCaptureValidationTest {
             startTime = null,
             allDay = true,
             durationText = "",
+            scheduleType = ScheduleType.HARD,
         )
 
         val submission = checkNotNull(validation.submission)

@@ -298,7 +298,8 @@ fun detectFocusOverrun(
     if (actualEnd <= plannedEnd) return null
     val affected = schedule.blocks.asSequence()
         .filter { it.id != occurrenceId && it.end > plannedEnd && it.start < actualEnd }
-        .sortedWith(compareBy<ScheduleBlock> { it.start }.thenBy { it.id })
+        // Show tasks that have not started yet before tasks already in progress.
+        .sortedWith(compareByDescending<ScheduleBlock> { it.start >= plannedEnd }.thenBy { it.start }.thenBy { it.id })
         .map(ScheduleBlock::id)
         .toList()
     val delay = Duration.between(plannedEnd, actualEnd).toMinutes()

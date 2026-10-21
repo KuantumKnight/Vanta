@@ -47,7 +47,7 @@ class PlanProposalValidatorTest {
             completedOccurrenceIds = emptySet(),
         )
 
-    private fun placement(id: String = taskId, from: Instant = start, to: Instant = start.plusSeconds(3600)) =
+    private fun placement(id: String = taskId, from: Instant = start, to: Instant = from.plusSeconds(3600)) =
         PlanPlacement(id, from, to, "Fits a free hour")
 
     @Test
