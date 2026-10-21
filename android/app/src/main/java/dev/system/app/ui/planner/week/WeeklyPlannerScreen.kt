@@ -47,6 +47,7 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Bounded seven-day planning surface. Data is supplied by the caller for the selected week; this
