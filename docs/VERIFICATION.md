@@ -46,14 +46,17 @@ All checks below ran on 21 October 2026 in the Vanta checkout.
 |---|---|
 | Consent `npm run lint` from `web/consent` | Passed. |
 | Consent `npm run build` from `web/consent` | Passed with CI placeholder values for the public Supabase build settings. |
+| Consent `npm audit` after `npm ci` | Passed: 0 vulnerabilities. |
 | `deno test --config supabase/deno.json supabase/functions/_shared/recurrence_test.ts` | Passed: 6 tests, 0 failures. |
 | `deno check --config supabase/deno.json supabase/functions/mcp/index.ts supabase/functions/expand-schedules/index.ts supabase/functions/sync-push/index.ts supabase/functions/send-reminders/index.ts` | Passed. |
 | `.\gradlew.bat --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` from `android` | Passed. `testDebugUnitTest` had no unit-test sources; lint, APK assembly, and Android test assembly passed. The documented Windows loopback-temp workaround was needed. |
 | `.\gradlew.bat --no-daemon connectedDebugAndroidTest` from `android` | Passed on `SYSTEM_CI_QA_FINAL` API 36: 19 tests, 0 failures, 0 errors. Includes queue persistence/migration and retry-state checks, cache identity, replay classification, sync follow-up gating, sign-in, response projection, and widget-feed tests. |
 
+GitHub Actions [run 45](https://github.com/KuantumKnight/Vanta/actions/runs/39536205576) passed on commit `5958a8a33bc8dc1c25e107fc6cdbd934371fefd3`: Consent site, Supabase Edge Functions, and Android debug APK including emulator instrumentation.
+
 ## Database integration acceptance
 
-GitHub Actions covers consent, Edge Functions, and Android; it does not connect to any database. Use `supabase/acceptance_pre_migration.sql` against the hosted project to record the currently applied-schema baseline. It expects authenticated direct occurrence `INSERT` to remain granted while `20261021090000` is pending. After applying the reviewed migrations, use `supabase/acceptance_database.sql` for the full behavioral acceptance. Both scripts use unique synthetic identities and transaction-local fixtures, and both must end with `ROLLBACK`.
+GitHub Actions covers consent, Edge Functions, and Android; it does not connect to any database. Both acceptance scripts use unique synthetic identities and transaction-local fixtures, and both must end with `ROLLBACK`.
 
 The full acceptance SQL covers:
 
@@ -65,7 +68,11 @@ The full acceptance SQL covers:
 - Same-owner token retries, multiple devices, active foreign-owner rejection, disabled-token reassignment, and disabling one phone without affecting another.
 - A task mutation completing when Vault refresh credentials are absent, with the Vault and test rows restored by rollback.
 
-**Result: not run yet.** Run the pre-migration baseline after CI and the read-only precheck. Run the full suite only after all four pending migrations are applied. After each, use a separate read-only query to confirm there are zero `vanta-acceptance-%@example.invalid` auth users, `VANTA_ACCEPTANCE_` task/goal titles, related occurrences/schedules/goal links, completion requests for those users, and token strings with that prefix. An authored script is not a passing database result.
+**Pre-migration baseline: PASS.** After CI run 45 passed and the read-only precheck matched the expected state, `supabase/acceptance_pre_migration.sql` ran against the hosted project on 21 October 2026. It passed current-schema checks for MCP create idempotency and changed-payload rejection, completion retry, habit creation, cross-user RLS and RPC update isolation, current token ownership semantics, refresh failure isolation, and anonymous task-write denial. It confirmed authenticated direct occurrence `INSERT` is still granted while `20261021090000` remains pending. A separate read-only postcheck found zero acceptance users, tasks, goals, occurrences, schedules, or tokens; both Vault credential rows were present again after rollback.
+
+**Full hosted suite: not run.** The CLI needed to apply the four repository versions is not installed or linked in this checkout, and no CLI access token or database password is configured. The available MCP `apply_migration` operation creates its own migration version, so it cannot faithfully apply these existing repository versions. Do not substitute it or repair migration history manually. Continue with the linked Supabase CLI migration workflow once CLI authentication is available; then run `supabase/acceptance_database.sql`. Afterward, use a separate read-only query to confirm zero `vanta-acceptance-%@example.invalid` auth users, `VANTA_ACCEPTANCE_` task/goal titles, related occurrences/schedules/goal links, completion requests for those users, and token strings with that prefix. The full suite has not been called PASS.
+
+The pre-rollout security advisor reported 11 intentionally authenticated `SECURITY DEFINER` RPCs and one Auth warning for disabled leaked-password protection. The post-migration advisor review has not run because the migrations have not been applied.
 
 ## Real V1 acceptance status
 
@@ -80,6 +87,8 @@ The full acceptance SQL covers:
 | Widget → Offline queue | PARTIAL | Durable queue and local optimistic state are instrumented; offline physical tap remains untested. |
 | Offline queue → Supabase | PARTIAL | Replay policies and SQL acceptance are authored; real database acceptance and owner replay remain pending. |
 | Supabase → ChatGPT | BLOCKED | Owner OAuth and post-completion ChatGPT query remain pending. |
+
+The newest available `system-consent` production deployment is READY but was created on 17 October 2026 from the Vercel CLI and carries no Git commit metadata for the 21 October source. The manual deployment workflow requires the `VERCEL_TOKEN` repository secret; the current consent source has not been verified as deployed.
 
 ## Owner acceptance after database rollout
 
