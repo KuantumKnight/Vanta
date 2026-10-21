@@ -58,27 +58,27 @@ The shared suite passed: 34 passed, 0 failed. All three Edge Function checks pas
 
 # Room Migration Chain
 
-Status: PARTIAL
+Status: BLOCKED
 
 Room version 1→8 has a contiguous registered migration path and source-level table, column, default, and index checks. Migration tests cover version 1, legacy versions 3–5, and Batch 2 version 6 through version 8. These tests have not run: Android Gradle configuration is blocked by the Java selector failure, and no emulator/device is available.
 
 # Supabase Disposable Migration Test
 
-Status: BLOCKED
+Status: PASS
 
-`npx --no-install supabase test db --local` stopped at `Connecting to local database...` with `ECONNREFUSED 127.0.0.1:54322`. Docker cannot connect to `npipe:////./pipe/dockerDesktopLinuxEngine`; no local PostgreSQL binaries or existing Supabase development branch were available. No disposable environment was created and no production test or migration was run. Therefore application of the nine pending migrations and their pgTAP tests is unverified.
+Created the free disposable project `vanta2-release-gate-20261021` in the user-selected organization. Applied the 14-migration baseline followed by all nine pending repository migrations; each migration succeeded. All nine pgTAP files passed, totaling 153 assertions. Three test-only migrations enabled pgTAP and reconciled two source corrections found during execution. No production migration was applied. The Supabase CLI deleted the project after validation, and a follow-up listing confirmed its ref is gone.
 
 # Supabase RLS / Grants
 
-Status: PARTIAL
+Status: PASS
 
-Static review covers owner-scoped RLS/RPCs, function execute privileges, private sync tables, and definer search paths. The pending `daily_reviews` migration explicitly revokes table access from PostgreSQL `PUBLIC`, `anon`, and `authenticated`, then grants authenticated `SELECT`; writes use an owner-derived RPC. Three new aggregate pgTAP assertions cover all four table operations for `anon`, `authenticated`, and `service_role` across ten public objects. Existing owner-isolation tests and the grant tests have not been executed against PostgreSQL.
+The disposable database passed owner-isolation, anonymous-denial, RPC ownership, direct-write restriction, private sync, daily-review, delta-sync, reschedule, reminder, and full role-privilege pgTAP checks. The table ACL suite checked `SELECT`, `INSERT`, `UPDATE`, and `DELETE` for `anon`, `authenticated`, and `service_role` across ten public Vanta objects. The Supabase advisor flagged four RLS-disabled tables in `private`; catalog checks confirm `anon` and `authenticated` have neither `USAGE` on `private` nor `SELECT` on the sync log. No advisor-driven schema changes were made.
 
 # Data API Exposure
 
-Status: PARTIAL
+Status: PASS
 
-The static intended role matrix for ten Vanta public objects is recorded in [VANTA2_MIGRATION_AUDIT.md](VANTA2_MIGRATION_AUDIT.md). It gives `anon` no table privileges, limits `authenticated` to owner-filtered reads plus token disable updates, and gives the trusted backend role explicit table access; `goal_progress` is read-only for `service_role`. A new pending grant migration closes the source-level omission for service-role access to `goal_progress` and makes the pending `daily_reviews` backend ACL explicit. The new matrix pgTAP test is not run. Local `supabase/config.toml` exposes `public`, but a read-only target query returned null for `pgrst.db_schemas`, so target Data API exposure remains unknown. The migration and privileges are absent remotely because they are pending.
+The static intended role matrix for ten Vanta public objects is recorded in [VANTA2_MIGRATION_AUDIT.md](VANTA2_MIGRATION_AUDIT.md). It gives `anon` no table privileges, limits `authenticated` to owner-filtered reads plus token-disable updates, and gives the trusted backend role explicit table access; `goal_progress` is read-only for `service_role`. The disposable pgTAP matrix passed. Authenticated REST reads returned the caller's task and zero rows for another owner; an anonymous REST read was denied with `42501`. A zero-row request to the existing target project's `/rest/v1/tasks` also returned `42501 permission denied`, confirming that `public` is exposed and anonymous privileges are denied. The target project's `pgrst.db_schemas` setting itself is null in SQL session state.
 
 # Google Calendar Configuration
 
@@ -96,7 +96,7 @@ Status: NOT READY
 
 Status: PARTIAL
 
-Source review found owner-scoped reads/writes, explicit `daily_reviews` table privileges, restricted function execution, private sync state, controlled definer search paths, and no need for service credentials in Android. No secret values are present in the release inputs. Runtime SQL/pgTAP, target Data API exposure, Google OAuth Console configuration, and signed-device flows remain unverified. The reviewed remote Supabase checks were limited to read-only migration and database metadata.
+Source review and disposable pgTAP found owner-scoped reads/writes, explicit `daily_reviews` table privileges, restricted function execution, private sync state, controlled definer search paths, and no need for service credentials in Android. The target Data API public schema is exposed and anonymous table access is denied. No production SQL changed. Google OAuth Console configuration and signed-device flows remain unverified. The security advisor also reported intentional authenticated `SECURITY DEFINER` RPCs and private tables without RLS; see the migration audit for the ACL evidence.
 
 # Performance
 
@@ -111,5 +111,26 @@ Status: PASS
 The release gate is committed and `git status --short --branch` is clean. The named stash preserves every out-of-scope modified/untracked path and its object ID and recovery command are recorded in [VANTA2_WORKSPACE_RECONCILIATION.md](VANTA2_WORKSPACE_RECONCILIATION.md). No local secrets, generated APK, or Gradle output is included in the release commit.
 
 # Batch 5
+
+NOT READY FOR BATCH 5
+
+## Final release-gate matrix
+
+| Gate | Status |
+|---|---|
+| Java loopback | FAIL — selector/loopback failure in the available JDKs |
+| Gradle configuration | FAIL — Gradle cannot reach project configuration |
+| Android unit | FAIL — blocked before test task discovery |
+| Android lint | FAIL — blocked before task discovery |
+| Debug APK | FAIL — blocked before task discovery |
+| Release APK/AAB | FAIL — blocked before task discovery |
+| Test APK | FAIL — blocked before task discovery |
+| Room migrations | FAIL — instrumentation suite could not run |
+| Deno | PASS — 34 shared tests and all three checks passed |
+| Supabase migrations | PASS — nine pending migrations applied to the disposable baseline |
+| pgTAP/RLS | PASS — 153 assertions across nine suites |
+| Data API grants | PASS — ACL matrix and live authenticated/anonymous behavior verified |
+| Secrets | PASS — no secret patterns detected in the pending diff |
+| Workspace clean | PASS — after the documented commit |
 
 NOT READY FOR BATCH 5

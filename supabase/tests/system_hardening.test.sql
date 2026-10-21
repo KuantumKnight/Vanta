@@ -236,10 +236,11 @@ select is(
   'disabled token ownership transfers to account B'
 );
 select set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', true);
+with changed as (
+  update public.device_tokens set enabled = false where token = 'vanta-active-token-owned-by-a-0000000001' returning 1
+)
 select is(
-  (with changed as (
-    update public.device_tokens set enabled = false where token = 'vanta-active-token-owned-by-a-0000000001' returning 1
-  ) select count(*) from changed),
+  (select count(*) from changed),
   0::bigint,
   'account A sign-out cannot disable account B token'
 );

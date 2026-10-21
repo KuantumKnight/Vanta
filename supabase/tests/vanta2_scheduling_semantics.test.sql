@@ -8,14 +8,14 @@ values
   ('18000000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'vanta-scheduling-a@example.invalid', '', now(), '{}', '{}', now(), now()),
   ('18000000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'vanta-scheduling-b@example.invalid', '', now(), '{}', '{}', now(), now());
 
-select ok(has_column('public', 'tasks', 'default_schedule_type'), 'tasks persist their default schedule type');
-select ok(has_column('public', 'tasks', 'default_priority'), 'tasks persist their default priority');
-select ok(has_column('public', 'task_occurrences', 'schedule_type'), 'occurrences persist schedule type');
-select ok(has_column('public', 'task_occurrences', 'priority'), 'occurrences persist priority');
-select ok(has_column('public', 'task_occurrences', 'deadline_at'), 'occurrences persist a separate deadline');
-select ok(has_column('public', 'task_occurrences', 'earliest_start'), 'occurrences persist earliest start');
-select ok(has_column('public', 'task_occurrences', 'latest_end'), 'occurrences persist latest end');
-select ok(has_column('public', 'task_occurrences', 'preferred_start'), 'occurrences persist preferred start');
+select has_column('public', 'tasks', 'default_schedule_type', 'tasks persist their default schedule type');
+select has_column('public', 'tasks', 'default_priority', 'tasks persist their default priority');
+select has_column('public', 'task_occurrences', 'schedule_type', 'occurrences persist schedule type');
+select has_column('public', 'task_occurrences', 'priority', 'occurrences persist priority');
+select has_column('public', 'task_occurrences', 'deadline_at', 'occurrences persist a separate deadline');
+select has_column('public', 'task_occurrences', 'earliest_start', 'occurrences persist earliest start');
+select has_column('public', 'task_occurrences', 'latest_end', 'occurrences persist latest end');
+select has_column('public', 'task_occurrences', 'preferred_start', 'occurrences persist preferred start');
 
 select set_config('request.jwt.claim.sub', '18000000-0000-4000-8000-000000000001', true);
 set local role authenticated;

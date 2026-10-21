@@ -328,7 +328,7 @@ begin
       default_priority = occurrence.priority
     where id = p_task_id and user_id = auth.uid();
     result := result || jsonb_build_object('occurrence',
-      coalesce(result->'occurrence', '{}'::jsonb) || jsonb_build_object(
+      coalesce(nullif(result->'occurrence', 'null'::jsonb), '{}'::jsonb) || jsonb_build_object(
         'schedule_type', occurrence.schedule_type, 'priority', occurrence.priority,
         'deadline_at', occurrence.deadline_at, 'earliest_start', occurrence.earliest_start,
         'latest_end', occurrence.latest_end, 'preferred_start', occurrence.preferred_start));

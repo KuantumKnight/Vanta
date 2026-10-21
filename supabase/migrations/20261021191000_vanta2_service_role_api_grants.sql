@@ -25,4 +25,5 @@ to service_role;
 
 -- goal_progress is an aggregate security-invoker view; its backend caller only
 -- needs SELECT, and the MCP Edge Function reads it with the service-role key.
+revoke all on public.goal_progress from service_role;
 grant select on public.goal_progress to service_role;

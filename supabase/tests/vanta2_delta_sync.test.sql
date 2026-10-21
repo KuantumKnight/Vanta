@@ -12,7 +12,14 @@ select set_config('request.jwt.claim.sub', '15000000-0000-4000-8000-000000000001
 set local role authenticated;
 
 select ok(
-  not has_table_privilege('authenticated', 'private.system_occurrence_changes', 'SELECT'),
+  not has_table_privilege(
+    'authenticated',
+    (select c.oid
+     from pg_catalog.pg_class c
+     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'private' and c.relname = 'system_occurrence_changes'),
+    'SELECT'
+  ),
   'authenticated clients cannot read the private delta log directly'
 );
 select throws_ok(

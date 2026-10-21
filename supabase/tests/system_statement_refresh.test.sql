@@ -18,6 +18,8 @@ select is(
   1::bigint,
   'task remains committed in the test transaction after best-effort push failure'
 );
+insert into public.tasks(id, user_id, title, kind)
+values ('21000000-0000-4000-8000-000000000001', '11000000-0000-4000-8000-000000000001', 'owner a one', 'task');
 set local role service_role;
 select lives_ok(
   $$insert into public.task_occurrences(task_id, user_id, scheduled_for, all_day)
@@ -55,7 +57,6 @@ end;
 $$;
 
 insert into public.tasks(id, user_id, title, kind) values
-  ('21000000-0000-4000-8000-000000000001', '11000000-0000-4000-8000-000000000001', 'owner a one', 'task'),
   ('21000000-0000-4000-8000-000000000002', '11000000-0000-4000-8000-000000000001', 'owner a two', 'task'),
   ('21000000-0000-4000-8000-000000000003', '11000000-0000-4000-8000-000000000001', 'owner a three', 'task'),
   ('22000000-0000-4000-8000-000000000001', '11000000-0000-4000-8000-000000000002', 'owner b one', 'task'),

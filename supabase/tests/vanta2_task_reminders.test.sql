@@ -34,8 +34,8 @@ select ok(
   not has_function_privilege('anon', 'public.system_set_task_reminders_enabled(text,boolean)', 'EXECUTE'),
   'anonymous users cannot update task reminder preferences'
 );
-select ok(
-  has_column('public', 'device_tokens', 'task_reminders_enabled'),
+select has_column(
+  'public', 'device_tokens', 'task_reminders_enabled',
   'device tokens store a per-device task reminder preference'
 );
 

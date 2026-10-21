@@ -86,6 +86,9 @@ end;
 $$;
 
 drop trigger if exists system_occurrences_widget_refresh on public.task_occurrences;
+drop trigger if exists system_occurrences_widget_refresh_insert on public.task_occurrences;
+drop trigger if exists system_occurrences_widget_refresh_update on public.task_occurrences;
+drop trigger if exists system_occurrences_widget_refresh_delete on public.task_occurrences;
 create trigger system_occurrences_widget_refresh_insert
 after insert on public.task_occurrences
 referencing new table as new_rows
