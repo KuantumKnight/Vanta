@@ -19,6 +19,11 @@ web/consent/.env.local
 .vercel/
 artifacts/
 supabase/.temp/
+supabase/supabase/.temp/
 supabase/.env
+# Developer secrets at any depth; keep checked-in examples visible.
+.env
+.env.*
+!.env.example
 *.jks
 *.keystore

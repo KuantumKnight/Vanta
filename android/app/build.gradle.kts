@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
+    id("androidx.baselineprofile")
 }
 
 if (file("google-services.json").exists()) {
@@ -36,6 +37,29 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            isProfileable = true
+            matchingFallbacks += listOf("release")
+        }
+        create("benchmarkRelease") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+        create("nonMinifiedRelease") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -69,13 +93,19 @@ dependencies {
     implementation("androidx.glance:glance-material3:1.2.0")
     implementation("androidx.room:room-runtime:2.8.5")
     implementation("androidx.room:room-ktx:2.8.5")
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
     ksp("androidx.room:room-compiler:2.8.5")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
     implementation("io.ktor:ktor-client-android:3.6.0")
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
     implementation("com.google.firebase:firebase-messaging")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+    baselineProfile(project(":benchmark"))
+
+    testImplementation("junit:junit:4.13.2")
 
     androidTestImplementation("androidx.room:room-testing:2.8.5")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
@@ -85,4 +115,9 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+baselineProfile {
+    // Profile generation is an explicit device task; assembling a release stays headless-safe.
+    automaticGenerationDuringBuild = false
 }

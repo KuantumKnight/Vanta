@@ -9,90 +9,73 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import dev.system.app.data.SystemDatabase
 import dev.system.app.data.SystemRepository
+import dev.system.app.calendar.GoogleCalendarRepository
+import dev.system.app.notifications.VantaDailyNotificationScheduler
+import dev.system.app.notifications.createVantaDailyNotificationChannels
+import dev.system.app.settings.DataStoreUserPreferencesRepository
+import dev.system.app.settings.UserPreferencesRepository
 import dev.system.app.sync.SyncWorker
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-
-sealed interface StartupState {
-    data object Initializing : StartupState
-    data class Ready(val database: SystemDatabase, val repository: SystemRepository) : StartupState
-    data class Failed(val cause: Throwable) : StartupState
-}
+import java.util.concurrent.TimeUnit
 
 class SystemApplication : Application() {
-    private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val startupLock = Any()
-    private var initializationJob: Job? = null
-    private val mutableStartup = MutableStateFlow<StartupState>(StartupState.Initializing)
-    val startup = mutableStartup.asStateFlow()
-
-    val repositoryOrNull: SystemRepository?
-        get() = (mutableStartup.value as? StartupState.Ready)?.repository
+    lateinit var database: SystemDatabase
+        private set
+    lateinit var repository: SystemRepository
+        private set
+    lateinit var userPreferencesRepository: UserPreferencesRepository
+        private set
+    /** Calendar cache is initialized only when a signed-in planner/settings surface needs it. */
+    val googleCalendarRepository: GoogleCalendarRepository by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        GoogleCalendarRepository(this)
+    }
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
-        initialize()
-    }
-
-    fun initialize() {
-        synchronized(startupLock) {
-            if (initializationJob?.isActive == true) return
-            mutableStartup.value = StartupState.Initializing
-            initializationJob = startupScope.launch {
-                try {
-                    val database = Room.databaseBuilder(
-                        applicationContext,
-                        SystemDatabase::class.java,
-                        "system-cache.db",
-                    ).addMigrations(
-                        SystemDatabase.MIGRATION_1_2,
-                        SystemDatabase.MIGRATION_2_3,
-                        SystemDatabase.MIGRATION_3_4,
-                        SystemDatabase.MIGRATION_4_5,
-                    ).build()
-                    val repository = SystemRepository(applicationContext, database)
-                    mutableStartup.value = StartupState.Ready(database, repository)
-                    schedulePeriodicSync()
-                } catch (error: Throwable) {
-                    mutableStartup.value = StartupState.Failed(error)
-                }
-            }
-        }
-    }
-
-    suspend fun awaitRepository(): SystemRepository = when (
-        val state = mutableStartup.first { it !is StartupState.Initializing }
-    ) {
-        is StartupState.Ready -> state.repository
-        is StartupState.Failed -> throw IllegalStateException("SYSTEM could not initialize its local data store.", state.cause)
-        StartupState.Initializing -> error("Unreachable startup state")
-    }
-
-    suspend fun awaitDatabase(): SystemDatabase = when (
-        val state = mutableStartup.first { it !is StartupState.Initializing }
-    ) {
-        is StartupState.Ready -> state.database
-        is StartupState.Failed -> throw IllegalStateException("SYSTEM could not initialize its local data store.", state.cause)
-        StartupState.Initializing -> error("Unreachable startup state")
-    }
-
-    private fun schedulePeriodicSync() {
-        runCatching {
-            val request = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .build()
-            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-                SyncWorker.PERIODIC_NAME,
-                ExistingPeriodicWorkPolicy.UPDATE,
-                request,
+        database = Room.databaseBuilder(this, SystemDatabase::class.java, "system-cache.db")
+            .addMigrations(
+                SystemDatabase.MIGRATION_1_2,
+                SystemDatabase.MIGRATION_2_3,
+                SystemDatabase.MIGRATION_3_4,
+                SystemDatabase.MIGRATION_4_5,
+                SystemDatabase.MIGRATION_5_6,
+                SystemDatabase.MIGRATION_6_7,
+                SystemDatabase.MIGRATION_7_8,
             )
+            .build()
+        userPreferencesRepository = DataStoreUserPreferencesRepository(this)
+        repository = SystemRepository(this, database, userPreferencesRepository)
+        createVantaDailyNotificationChannels(this)
+        applicationScope.launch {
+            userPreferencesRepository.preferences
+                .distinctUntilChanged { old, new ->
+                    old.morningBriefingEnabled == new.morningBriefingEnabled &&
+                        old.morningBriefingMinute == new.morningBriefingMinute &&
+                        old.eveningReviewEnabled == new.eveningReviewEnabled &&
+                        old.eveningReviewMinute == new.eveningReviewMinute
+                }
+                .collect { preferences -> VantaDailyNotificationScheduler.schedule(this@SystemApplication, preferences) }
         }
+        applicationScope.launch {
+            userPreferencesRepository.preferences
+                .map { it.taskRemindersEnabled }
+                .distinctUntilChanged()
+                .collect { repository.syncTaskReminderPreference() }
+        }
+        val request = PeriodicWorkRequestBuilder<SyncWorker>(24, TimeUnit.HOURS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            SyncWorker.PERIODIC_NAME,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            request,
+        )
     }
 }

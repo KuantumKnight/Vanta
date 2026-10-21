@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Vanta</string>
+    <string name="reminder_channel_name">Vanta reminders</string>
+    <string name="reminder_channel_description">Deadline reminders for your Vanta tasks</string>
+    <string name="reminder_notification_title">Vanta reminder</string>
+    <string name="widget_recovery">Open Vanta to try again.</string>
+    <string name="widget_now_next_name">Vanta · NOW / NEXT</string>
+    <string name="widget_today_compact_name">Vanta · TODAY</string>
+    <string name="sign_in_account_description">We’ll send a secure sign-in link to create or access your private Vanta account.</string>
+</resources>

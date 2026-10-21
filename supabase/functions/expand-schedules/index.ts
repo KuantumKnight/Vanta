@@ -1,16 +1,24 @@
 import { admin, json, requireInternal } from "../_shared/admin.ts";
-import { getOccurrences, localDateTimeToUtc, type ScheduleForExpansion } from "../_shared/recurrence.ts";
+import {
+  getOccurrences,
+  localDateTimeToUtc,
+  type ScheduleForExpansion,
+} from "../_shared/recurrence.ts";
 
 const BATCH_SIZE = 500;
-const SCHEDULE_PAGE_SIZE = 1000;
 const LOOKBACK_DAYS = 30;
 const LOOKAHEAD_DAYS = 90;
 
 function dayInZone(date: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
   return values.year + "-" + values.month + "-" + values.day;
 }
 
@@ -21,33 +29,50 @@ Deno.serve(async (request) => {
   const now = new Date();
   const from = new Date(now.getTime() - LOOKBACK_DAYS * 86400000);
   const to = new Date(now.getTime() + LOOKAHEAD_DAYS * 86400000);
-  const schedules: ScheduleForExpansion[] = [];
-  for (let offset = 0; ; offset += SCHEDULE_PAGE_SIZE) {
-    const { data, error } = await admin.from("habit_schedules")
-      .select("id,task_id,user_id,dtstart,timezone,rrule,rdates,exdates,effective_from,effective_until,reminder_time")
-      .is("effective_until", null)
-      .order("id", { ascending: true })
-      .range(offset, offset + SCHEDULE_PAGE_SIZE - 1);
-    if (error) return json({ error: "Could not load schedules." }, 500);
-    schedules.push(...((data ?? []) as ScheduleForExpansion[]));
-    if ((data ?? []).length < SCHEDULE_PAGE_SIZE) break;
-  }
+  const { data: schedules, error } = await admin.from("habit_schedules")
+    .select(
+      "id,task_id,user_id,dtstart,timezone,rrule,rdates,exdates,effective_from,effective_until,reminder_time,task:tasks!inner(default_duration_minutes,default_schedule_type,default_priority)",
+    )
+    .is("effective_until", null).range(0, 999);
+  if (error) return json({ error: "Could not load schedules." }, 500);
 
   let materialized = 0;
   let skipped = 0;
-  for (const schedule of schedules) {
+  for (const schedule of (schedules ?? []) as ScheduleForExpansion[]) {
     try {
+      const durationMinutes = (schedule as ScheduleForExpansion & {
+        task?: {
+          default_duration_minutes?: number | null;
+          default_schedule_type?: "HARD" | "SOFT" | "FLEXIBLE" | null;
+          default_priority?: "LOW" | "NORMAL" | "HIGH" | null;
+        } | null;
+      }).task?.default_duration_minutes ?? null;
+      const task = (schedule as ScheduleForExpansion & {
+        task?: {
+          default_schedule_type?: "HARD" | "SOFT" | "FLEXIBLE" | null;
+          default_priority?: "LOW" | "NORMAL" | "HIGH" | null;
+        } | null;
+      }).task;
+      const scheduleType = task?.default_schedule_type ?? "SOFT";
+      const priority = task?.default_priority ?? "NORMAL";
       const occurrences = getOccurrences(schedule, from, to);
       const rows = occurrences.map((scheduled) => {
         const reminderTime = schedule.reminder_time?.slice(0, 5);
-        const reminderAt = reminderTime ? localDateTimeToUtc(dayInZone(scheduled), reminderTime) : null;
+        const reminderAt = reminderTime
+          ? localDateTimeToUtc(dayInZone(scheduled), reminderTime)
+          : null;
         return {
           task_id: schedule.task_id,
           schedule_id: schedule.id,
           user_id: schedule.user_id,
           scheduled_for: scheduled.toISOString(),
           all_day: false,
-          reminder_at: reminderAt && new Date(reminderAt) > now ? reminderAt : null,
+          reminder_at: reminderAt && new Date(reminderAt) > now
+            ? reminderAt
+            : null,
+          duration_minutes: durationMinutes,
+          schedule_type: scheduleType,
+          priority,
         };
       });
       for (let offset = 0; offset < rows.length; offset += BATCH_SIZE) {

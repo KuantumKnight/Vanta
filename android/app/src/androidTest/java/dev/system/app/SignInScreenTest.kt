@@ -2,15 +2,15 @@ package dev.system.app
 
 import android.content.Intent
 import android.net.Uri
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -20,16 +20,26 @@ class SignInScreenTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun emailSignInValidatesAddressBeforeAllowingCodeRequest() {
-        composeRule.waitUntil(timeoutMillis = 15_000) {
-            composeRule.onAllNodesWithText("Continue with email").fetchSemanticsNodes().isNotEmpty()
-        }
+    fun publicAppIdentityUsesVanta() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val appLabel = context.packageManager.getApplicationLabel(context.applicationInfo).toString()
+        val widgetLabel = context.packageManager.getReceiverInfo(
+            android.content.ComponentName(context, dev.system.app.widget.SystemWidgetReceiver::class.java),
+        ).loadLabel(context.packageManager).toString()
+
+        assertEquals("Vanta", appLabel)
+        assertEquals("Vanta", widgetLabel)
+        composeRule.onNodeWithText("Vanta").assertIsDisplayed()
+    }
+
+    @Test
+    fun emailSignInChecksAddressBeforeEnablingLinkRequest() {
         composeRule.onNodeWithText("Continue with email").assertIsDisplayed()
-        composeRule.onNodeWithText("Send sign-in email").assertIsNotEnabled()
+        composeRule.onNodeWithText("Email me a sign-in link").assertIsNotEnabled()
 
         composeRule.onNode(hasSetTextAction()).performTextInput("qa@example.com")
 
-        composeRule.onNodeWithText("Send sign-in email").assertIsEnabled()
+        composeRule.onNodeWithText("Email me a sign-in link").assertIsEnabled()
     }
 
     @Test

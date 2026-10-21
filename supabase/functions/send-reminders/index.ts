@@ -18,8 +18,9 @@ Deno.serve(async (request) => {
         token: reminder.token,
         data: { type: "reminder", occurrence_id: reminder.occurrence_id },
         notification: {
-          title: "SYSTEM reminder",
-          body: reminder.task_title + (reminder.scheduled_for ? " is due soon." : " is due."),
+          title: "Vanta reminder",
+          body: reminder.task_title +
+            (reminder.scheduled_for ? " is due soon." : " is due."),
         },
         priority: "HIGH",
         channelId: "system_reminders",
@@ -38,7 +39,10 @@ Deno.serve(async (request) => {
     } else {
       failed++;
       if (result.permanent) {
-        await admin.from("device_tokens").update({ enabled: false }).eq("id", reminder.device_id);
+        await admin.from("device_tokens").update({ enabled: false }).eq(
+          "id",
+          reminder.device_id,
+        );
       }
       await admin.rpc("system_finish_reminder", {
         p_occurrence_id: reminder.occurrence_id,

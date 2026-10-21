@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "SYSTEM"
-include(":app")
+include(":app", ":benchmark")

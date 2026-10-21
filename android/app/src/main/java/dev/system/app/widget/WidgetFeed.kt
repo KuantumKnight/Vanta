@@ -4,46 +4,42 @@ import dev.system.app.data.CachedOccurrence
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.util.Locale
 
-private val systemZone = ZoneId.of("Asia/Kolkata")
-
-internal data class WidgetDatedOccurrence(
-    val date: LocalDate,
+/** Kept for the original feed calculations and regression coverage. */
+internal data class WidgetFeedItem(
     val occurrence: CachedOccurrence,
+    val localDate: LocalDate,
 )
 
 internal data class WidgetFeed(
-    val todayAndOverdue: List<WidgetDatedOccurrence>,
-    val anytime: List<CachedOccurrence>,
-    val upcoming: List<WidgetDatedOccurrence>,
-)
+    val overdue: List<WidgetFeedItem>,
+    val today: List<WidgetFeedItem>,
+    val upcoming: List<WidgetFeedItem>,
+    val unscheduled: List<CachedOccurrence>,
+) {
+    val isEmpty: Boolean get() = overdue.isEmpty() && today.isEmpty() && upcoming.isEmpty() && unscheduled.isEmpty()
+}
 
-internal fun buildWidgetFeed(rows: List<CachedOccurrence>, today: LocalDate): WidgetFeed {
-    val todayAndOverdue = mutableListOf<WidgetDatedOccurrence>()
-    val anytime = mutableListOf<CachedOccurrence>()
-    val upcoming = mutableListOf<WidgetDatedOccurrence>()
-
+internal fun buildWidgetFeed(
+    rows: List<CachedOccurrence>,
+    today: LocalDate,
+    zone: ZoneId = ZoneId.of("Asia/Kolkata"),
+): WidgetFeed {
+    val dated = mutableListOf<WidgetFeedItem>()
+    val unscheduled = mutableListOf<CachedOccurrence>()
     rows.filter { it.status == "pending" }.forEach { row ->
-        val date = row.scheduledFor?.let { value ->
-            runCatching { Instant.parse(value).atZone(systemZone).toLocalDate() }.getOrNull()
-        }
-        if (date == null) {
-            anytime += row
+        val instant = row.scheduledFor?.let { value -> runCatching { Instant.parse(value) }.getOrNull() }
+        if (instant == null) {
+            unscheduled += row
         } else {
-            val item = WidgetDatedOccurrence(date, row)
-            if (date <= today) todayAndOverdue += item else upcoming += item
+            dated += WidgetFeedItem(row, instant.atZone(zone).toLocalDate())
         }
     }
-
-    val datedOrder = compareBy<WidgetDatedOccurrence>(
-        { it.date },
-        { it.occurrence.title.lowercase(Locale.ROOT) },
-        { it.occurrence.id },
-    )
+    val ordered = dated.sortedWith(compareBy<WidgetFeedItem> { it.localDate }.thenBy { it.occurrence.scheduledFor })
     return WidgetFeed(
-        todayAndOverdue = todayAndOverdue.sortedWith(datedOrder),
-        anytime = anytime.sortedWith(compareBy({ it.title.lowercase(Locale.ROOT) }, { it.id })),
-        upcoming = upcoming.sortedWith(datedOrder),
+        overdue = ordered.filter { it.localDate < today },
+        today = ordered.filter { it.localDate == today },
+        upcoming = ordered.filter { it.localDate > today },
+        unscheduled = unscheduled.sortedBy { it.title.lowercase() },
     )
 }

@@ -1,18 +1,20 @@
 package dev.system.app.data
 
 import android.content.Context
-import android.content.ContentValues
-import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.IOException
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
@@ -22,8 +24,8 @@ class SystemDaoOfflineQueueTest {
     private lateinit var database: SystemDatabase
 
     @Before
-    fun createDatabase() {
-        database = openDatabase()
+    fun openDatabase() {
+        database = newDatabase()
     }
 
     @After
@@ -33,229 +35,269 @@ class SystemDaoOfflineQueueTest {
     }
 
     @Test
-    fun queuedCompletionAndStableKeySurviveDatabaseReopen() = runBlocking {
-        val occurrence = CachedOccurrence(
-            id = "occurrence-1",
-            userId = "user-a",
-            taskId = "task-1",
-            title = "50 push-ups",
-            notes = null,
-            scheduledFor = "2026-09-25T00:00:00Z",
-            allDay = true,
-            kind = "task",
-            status = "pending",
-            completedAt = null,
-        )
-        val request = PendingCompletion(
+    fun queuedCompletionAndKeySurviveReopenAndHidePendingRefreshRows() = runBlocking {
+        val occurrence = occurrence()
+        val queued = PendingCompletion(
             idempotencyKey = "stable-operation-key",
-            userId = "user-a",
             occurrenceId = occurrence.id,
             queuedAt = 1_790_280_000_000L,
+            userId = USER_A,
+        )
+        val dao = database.systemDao()
+        dao.replaceOccurrences(listOf(occurrence))
+        assertTrue(dao.storeQueuedCompletion(queued, occurrence.copy(status = "completed", completedAt = "2026-09-24T12:00:00Z")))
+        assertFalse(
+            dao.storeQueuedCompletion(
+                PendingCompletion("duplicate-key", occurrence.id, userId = USER_A),
+                occurrence.copy(status = "completed", completedAt = "2026-09-24T12:01:00Z"),
+            ),
         )
 
-        database.systemDao().replaceOccurrences(listOf(occurrence))
-        database.systemDao().queueCompletion(
-            request,
-            occurrence.copy(status = "completed", completedAt = "2026-09-24T12:00:00Z"),
-        )
-        database.systemDao().markCompletionAttempt("user-a", request.idempotencyKey, 1_790_280_000_100L)
+        assertTrue(dao.pendingSnapshot(USER_A).isEmpty())
+        dao.replaceOccurrencesSnapshot(USER_A, listOf(occurrence))
+        assertTrue(dao.pendingSnapshot(USER_A).isEmpty())
+
         database.close()
-
-        database = openDatabase()
-        val dao = database.systemDao()
-        assertEquals("completed", dao.occurrence("user-a", occurrence.id)?.status)
-        val restored = dao.pendingCompletions("user-a").single()
-        assertEquals(request.idempotencyKey, restored.idempotencyKey)
-        assertEquals("PENDING", restored.state)
-        assertEquals(1_790_280_000_100L, restored.lastAttemptAt)
-        assertTrue(dao.pendingCompletions("user-b").isEmpty())
-
-        dao.removePendingCompletion("user-a", request.idempotencyKey)
-        assertTrue(dao.pendingCompletions("user-a").isEmpty())
+        database = newDatabase()
+        val reopened = database.systemDao()
+        assertEquals(listOf(queued), reopened.pendingCompletions(USER_A))
+        assertTrue(reopened.pendingSnapshot(USER_A).isEmpty())
+        assertEquals("stable-operation-key", reopened.pendingCompletions(USER_A).single().idempotencyKey)
     }
 
     @Test
-    fun snapshotRefreshKeepsQueuedCompletionOptimisticAndIsolatesUsers() = runBlocking {
-        val dao = database.systemDao()
-        val queued = occurrence("queued", "user-a")
-        val removed = occurrence("removed", "user-a")
-        val otherUser = occurrence("other-user", "user-b")
-        dao.replaceOccurrences(listOf(queued, removed, otherUser))
-        val completion = PendingCompletion("operation-a", "user-a", queued.id)
-        dao.queueCompletion(completion, queued.copy(status = "completed", completedAt = "2026-09-24T12:00:00Z"))
+    fun permanentFailureIsDeadLetteredAndDoesNotBlockLaterSuccess() = runBlocking {
+        val dao = queuedDao(occurrence("permanent-a"), occurrence("valid-b"))
+        val replayed = mutableListOf<String>()
+        CompletionQueueReplayer(dao) { item ->
+            replayed += item.idempotencyKey
+            if (item.occurrenceId == "permanent-a") {
+                ReplayResult(ReplayOutcome.PERMANENT_FAILURE, "NOT_FOUND", "Occurrence was removed.")
+            } else ReplayResult(ReplayOutcome.SUCCESS)
+        }.replay(USER_A)
 
-        dao.replaceOccurrencesSnapshot(
-            "user-a",
-            listOf(queued, occurrence("new", "user-a"), occurrence("injected", "user-b")),
-        )
-
-        assertEquals("completed", dao.occurrence("user-a", queued.id)?.status)
-        assertEquals(null, dao.occurrence("user-a", removed.id))
-        assertEquals("pending", dao.occurrence("user-a", "new")?.status)
-        assertEquals("pending", dao.occurrence("user-b", otherUser.id)?.status)
-        assertEquals(null, dao.occurrence("user-a", "injected"))
-        assertEquals(listOf(completion), dao.pendingCompletions("user-a"))
+        assertEquals(listOf("key-permanent-a", "key-valid-b"), replayed)
+        val retained = dao.pendingCompletions(USER_A).single()
+        assertEquals("key-permanent-a", retained.idempotencyKey)
+        assertEquals("dead_letter", retained.state)
+        assertEquals("NOT_FOUND", retained.lastErrorCode)
     }
 
     @Test
-    fun duplicateQueueForOccurrenceKeepsOriginalIdempotencyKey() = runBlocking {
-        val dao = database.systemDao()
-        val occurrence = occurrence("same-occurrence", "user-a")
-        val first = PendingCompletion("first-operation", "user-a", occurrence.id, queuedAt = 1)
-        val duplicate = PendingCompletion("second-operation", "user-a", occurrence.id, queuedAt = 2)
+    fun retryableFailureSchedulesBackoffAndDoesNotBlockLaterSuccess() = runBlocking {
+        val dao = queuedDao(occurrence("retry-a"), occurrence("valid-b"))
+        val replayed = mutableListOf<String>()
+        val summary = CompletionQueueReplayer(dao, now = { 1_000L }) { item ->
+            replayed += item.idempotencyKey
+            if (item.occurrenceId == "retry-a") throw IOException("network disconnected")
+            ReplayResult(ReplayOutcome.SUCCESS)
+        }.replay(USER_A)
 
-        assertTrue(dao.queueCompletion(first, occurrence.copy(status = "completed")))
-        assertEquals(false, dao.queueCompletion(duplicate, occurrence.copy(status = "completed")))
-        assertEquals(listOf(first), dao.pendingCompletions("user-a"))
+        assertEquals(listOf("key-retry-a", "key-valid-b"), replayed)
+        val retained = dao.pendingCompletions(USER_A).single()
+        assertEquals("key-retry-a", retained.idempotencyKey)
+        assertEquals("queued", retained.state)
+        assertEquals(1, retained.retryCount)
+        assertEquals(31_000L, retained.nextAttemptAt)
+        assertEquals(31_000L, summary.nextRetryAt)
     }
 
     @Test
-    fun permanentFailureAIsDeadLetteredAndDoesNotBlockValidB() = runBlocking {
-        val dao = database.systemDao()
-        val a = occurrence("permanent-a", "user-a")
-        val b = occurrence("valid-b", "user-a")
-        val itemA = PendingCompletion("stable-a", "user-a", a.id, queuedAt = 1)
-        val itemB = PendingCompletion("stable-b", "user-a", b.id, queuedAt = 2)
-        dao.queueCompletion(itemA, a.copy(status = "completed"))
-        dao.queueCompletion(itemB, b.copy(status = "completed"))
-
-        dao.setCompletionOutcome(
-            userId = "user-a",
-            key = itemA.idempotencyKey,
-            state = "PERMANENT_FAILURE",
-            retryCount = 0,
-            attemptedAt = 10,
-            nextAttemptAt = null,
-            errorCode = "P0002",
-            message = "Task occurrence not found",
-        )
-
-        assertEquals(listOf(itemB), dao.eligibleCompletions("user-a", now = 10))
-        assertEquals("PERMANENT_FAILURE", dao.pendingCompletions("user-a").first().state)
-        assertEquals("stable-a", dao.pendingCompletions("user-a").first().idempotencyKey)
+    fun alreadyAppliedCompletionClearsQueueEntry() = runBlocking {
+        val dao = queuedDao(occurrence("already-done"))
+        CompletionQueueReplayer(dao) { ReplayResult(ReplayOutcome.ALREADY_APPLIED) }.replay(USER_A)
+        assertTrue(dao.pendingCompletions(USER_A).isEmpty())
     }
 
     @Test
-    fun retryableFailureTracksBackoffAndKeepsOperationKey() = runBlocking {
-        val dao = database.systemDao()
-        val row = occurrence("retryable", "user-a")
-        val item = PendingCompletion("stable-retry-key", "user-a", row.id)
-        dao.queueCompletion(item, row.copy(status = "completed"))
-        dao.setCompletionOutcome(
-            userId = "user-a",
-            key = item.idempotencyKey,
-            state = "RETRYABLE",
-            retryCount = 1,
-            attemptedAt = 100,
-            nextAttemptAt = 200,
-            errorCode = "503",
-            message = "Temporary sync problem",
-        )
+    fun authRequiredStopsReplayAndRetainsLaterItems() = runBlocking {
+        val dao = queuedDao(occurrence("auth-a"), occurrence("auth-b"))
+        val firstPass = mutableListOf<String>()
+        CompletionQueueReplayer(dao) { item ->
+            firstPass += item.idempotencyKey
+            ReplayResult(ReplayOutcome.AUTH_REQUIRED, "AUTH_REQUIRED", "Sign in again.")
+        }.replay(USER_A)
+        assertEquals(listOf("key-auth-a"), firstPass)
+        assertEquals(2, dao.pendingCompletions(USER_A).size)
+        assertEquals("AUTH_REQUIRED", dao.pendingCompletions(USER_A).first().lastErrorCode)
 
-        assertTrue(dao.eligibleCompletions("user-a", now = 199).isEmpty())
-        val due = dao.eligibleCompletions("user-a", now = 200).single()
-        assertEquals(item.idempotencyKey, due.idempotencyKey)
-        assertEquals(1, due.retryCount)
-        assertEquals("RETRYABLE", due.state)
+        dao.resetAuthRequiredCompletions(USER_A)
+        CompletionQueueReplayer(dao) { ReplayResult(ReplayOutcome.SUCCESS) }.replay(USER_A)
+        assertTrue(dao.pendingCompletions(USER_A).isEmpty())
     }
 
     @Test
-    fun authFailureRetainsQueueUntilLaterAuthenticatedReplay() = runBlocking {
-        val dao = database.systemDao()
-        val row = occurrence("auth-required", "user-a")
-        val item = PendingCompletion("stable-auth-key", "user-a", row.id)
-        dao.queueCompletion(item, row.copy(status = "completed"))
+    fun serverCommitThenLostResponseRetriesWithTheSameIdempotencyKey() = runBlocking {
+        val dao = queuedDao(occurrence("commit-lost"))
+        val serverApplied = mutableSetOf<String>()
+        val keysSeen = mutableListOf<String>()
+        CompletionQueueReplayer(dao, now = { 1_000L }) { item ->
+            keysSeen += item.idempotencyKey
+            if (serverApplied.add(item.idempotencyKey)) throw IOException("response timed out after commit")
+            ReplayResult(ReplayOutcome.ALREADY_APPLIED)
+        }.replay(USER_A)
 
-        dao.markCompletionsAuthRequired("user-a", 50, "Sign in again to sync this saved completion.")
+        CompletionQueueReplayer(dao, now = { 31_001L }) { item ->
+            keysSeen += item.idempotencyKey
+            if (serverApplied.contains(item.idempotencyKey)) ReplayResult(ReplayOutcome.ALREADY_APPLIED)
+            else ReplayResult(ReplayOutcome.SUCCESS)
+        }.replay(USER_A)
 
-        val retained = dao.pendingCompletions("user-a").single()
-        assertEquals(item.idempotencyKey, retained.idempotencyKey)
-        assertEquals("AUTH_REQUIRED", retained.state)
-        // The repository does not request eligible queue items until a remote
-        // authenticated identity is available again.
-        assertEquals("stable-auth-key", dao.eligibleCompletions("user-a", now = 100).single().idempotencyKey)
+        assertEquals(listOf("key-commit-lost", "key-commit-lost"), keysSeen)
+        assertTrue(dao.pendingCompletions(USER_A).isEmpty())
     }
 
     @Test
-    fun legacyRoomRowsMigrateWithoutAssumingAccountOwnership() = runBlocking {
-        database.close()
-        val legacy = SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(databaseName), null)
-        legacy.execSQL("CREATE TABLE cached_occurrences (id TEXT NOT NULL PRIMARY KEY, taskId TEXT NOT NULL, title TEXT NOT NULL, notes TEXT, scheduledFor TEXT, allDay INTEGER NOT NULL, status TEXT NOT NULL, completedAt TEXT)")
-        legacy.execSQL("CREATE TABLE pending_completions (idempotencyKey TEXT NOT NULL PRIMARY KEY, occurrenceId TEXT NOT NULL, queuedAt INTEGER NOT NULL, lastError TEXT)")
-        legacy.insertOrThrow(
-            "cached_occurrences",
-            null,
-            ContentValues().apply {
-                put("id", "legacy-occurrence")
-                put("taskId", "legacy-task")
-                put("title", "Legacy task")
-                put("allDay", 1)
-                put("status", "completed")
-                put("completedAt", "2026-09-24T12:00:00Z")
-            },
-        )
-        legacy.insertOrThrow(
-            "pending_completions",
-            null,
-            ContentValues().apply {
-                put("idempotencyKey", "legacy-key")
-                put("occurrenceId", "legacy-occurrence")
-                put("queuedAt", 1_790_280_000_000L)
-            },
-        )
-        legacy.insertOrThrow(
-            "pending_completions",
-            null,
-            ContentValues().apply {
-                put("idempotencyKey", "duplicate-legacy-key")
-                put("occurrenceId", "legacy-occurrence")
-                put("queuedAt", 1_790_280_000_001L)
-            },
-        )
-        legacy.version = 1
-        legacy.close()
-
-        database = openDatabase()
+    fun userSnapshotsAndQueuesStayIsolated() = runBlocking {
         val dao = database.systemDao()
-        assertEquals(null, dao.occurrence("user-a", "legacy-occurrence"))
-        database.openHelper.writableDatabase.query(
-            "SELECT kind FROM cached_occurrences WHERE id = ?",
-            arrayOf("legacy-occurrence"),
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("task", cursor.getString(0))
+        val accountA = occurrence("account-a", USER_A)
+        val accountB = occurrence("account-b", USER_B)
+        dao.replaceOccurrences(listOf(accountA, accountB))
+        dao.storeQueuedCompletion(
+            PendingCompletion("account-a-key", accountA.id, userId = USER_A),
+            accountA.copy(status = "completed", completedAt = "2026-09-24T12:00:00Z"),
+        )
+
+        assertTrue(dao.pendingSnapshot(USER_A).isEmpty())
+        assertEquals(listOf("account-b"), dao.pendingSnapshot(USER_B).map { it.id })
+        assertEquals(listOf(USER_A), dao.pendingCompletions(USER_A).map { it.userId })
+        assertTrue(dao.pendingCompletions(USER_B).isEmpty())
+    }
+
+    @Test
+    fun widgetSnapshotIsBoundedAndKeepsCurrentTodayCompletedAndNextRows() = runBlocking {
+        val zone = ZoneId.of("Asia/Kolkata")
+        val today = LocalDate.of(2026, 10, 21)
+        val now = today.atTime(15, 30).atZone(zone).toInstant()
+        val todayRows = (0 until 140).map { index ->
+            occurrence("today-$index").copy(
+                scheduledFor = today.atTime(16, 0).atZone(zone).toInstant().plusSeconds(index.toLong()).toString(),
+                durationMinutes = 30,
+            )
         }
-        assertEquals("", dao.legacyPendingCompletions().single().userId)
-        assertEquals("legacy-key", dao.legacyPendingCompletions().single().idempotencyKey)
-        assertEquals("PENDING", dao.legacyPendingCompletions().single().state)
+        val previousCurrent = occurrence("previous-current").copy(
+            scheduledFor = today.minusDays(1).atTime(18, 0).atZone(zone).toInstant().toString(),
+            durationMinutes = 1_440,
+        )
+        val completedToday = occurrence("completed-today").copy(
+            scheduledFor = today.atTime(15, 0).atZone(zone).toInstant().toString(),
+            status = "completed",
+            completedAt = today.atTime(15, 10).atZone(zone).toInstant().toString(),
+            durationMinutes = 15,
+        )
+        val nextDay = occurrence("next-day").copy(
+            scheduledFor = today.plusDays(3).atTime(9, 0).atZone(zone).toInstant().toString(),
+        )
+        val old = occurrence("old").copy(
+            scheduledFor = today.minusDays(3).atTime(12, 0).atZone(zone).toInstant().toString(),
+        )
+        val dao = database.systemDao()
+        dao.replaceOccurrences(todayRows + previousCurrent + completedToday + nextDay + old)
 
-        // Production claims a legacy queue item only after its occurrence is
-        // visible through the currently authenticated user's RLS policy.
-        dao.adoptLegacyCompletion("user-a", "legacy-key")
-        assertEquals("user-a", dao.pendingCompletions("user-a").single().userId)
-        assertTrue(dao.pendingCompletions("user-b").isEmpty())
+        val snapshot = dao.widgetSnapshot(
+            userId = USER_A,
+            activeSince = now.minusSeconds(24 * 60 * 60).toString(),
+            nowEpochSeconds = now.epochSecond,
+            dayStart = today.atStartOfDay(zone).toInstant().toString(),
+            nextDayStart = today.plusDays(1).atStartOfDay(zone).toInstant().toString(),
+        )
+
+        assertEquals(128, snapshot.occurrences.size)
+        assertTrue(snapshot.occurrences.any { it.id == "previous-current" })
+        assertTrue(snapshot.occurrences.any { it.id == "completed-today" })
+        assertTrue(snapshot.occurrences.any { it.id == "next-day" })
+        assertFalse(snapshot.occurrences.any { it.id == "old" })
+        assertEquals(140, snapshot.todayPendingCount)
+        assertEquals(1, snapshot.todayCompletedCount)
+        assertEquals(4_215L, snapshot.plannedMinutes)
     }
 
-    private fun occurrence(id: String, userId: String) = CachedOccurrence(
+    @Test
+    fun createMutationAndTemporaryOccurrenceSurviveReopenWithStableOperationId() = runBlocking {
+        val operationId = UUID.randomUUID().toString()
+        val localId = "local:$operationId"
+        val local = occurrence(localId).copy(taskId = localId, title = "Offline capture")
+        val mutation = PendingMutation(
+            operationId = operationId,
+            userId = USER_A,
+            operationType = "create_task",
+            localOccurrenceId = localId,
+            title = local.title,
+            scheduledFor = local.scheduledFor,
+            allDay = local.allDay,
+            durationMinutes = 30,
+        )
+
+        assertTrue(database.systemDao().storeCreateMutation(mutation, local))
+        database.close()
+        database = newDatabase()
+
+        val reopened = database.systemDao()
+        assertEquals(local, reopened.occurrence(USER_A, localId))
+        assertEquals(operationId, reopened.pendingMutations(USER_A).single().operationId)
+        assertEquals(localId, reopened.nextDuePendingMutation(USER_A, System.currentTimeMillis())?.localOccurrenceId)
+    }
+
+    @Test
+    fun incomingDeltaKeepsOptimisticScheduleAndStillAdvancesItsCheckpoint() = runBlocking {
+        val original = occurrence("rescheduled")
+        val optimisticSchedule = "2026-09-25T12:30:00Z"
+        val dao = database.systemDao()
+        dao.replaceOccurrences(listOf(original))
+        assertTrue(
+            dao.storeRescheduleMutation(
+                PendingMutation(
+                    operationId = "reschedule-operation",
+                    userId = USER_A,
+                    operationType = "reschedule_occurrence",
+                    targetOccurrenceId = original.id,
+                    scheduledFor = optimisticSchedule,
+                ),
+                original.copy(scheduledFor = optimisticSchedule),
+            ),
+        )
+
+        val staleRemote = original.copy(scheduledFor = "2026-09-25T10:00:00Z")
+        val delta = OccurrenceDelta(1, original.id, isDeleted = false, occurrence = staleRemote)
+        dao.applyDeltaPage(USER_A, listOf(delta), revision = 1)
+
+        assertEquals(optimisticSchedule, dao.occurrence(USER_A, original.id)?.scheduledFor)
+        assertEquals(1L, dao.syncCheckpoint(USER_A)?.revision)
+        assertEquals(1, dao.pendingMutations(USER_A).size)
+    }
+
+    private suspend fun queuedDao(vararg occurrences: CachedOccurrence): SystemDao {
+        val dao = database.systemDao()
+        occurrences.forEach { occurrence ->
+            dao.replaceOccurrences(listOf(occurrence))
+            dao.storeQueuedCompletion(
+                PendingCompletion("key-${occurrence.id}", occurrence.id, userId = USER_A),
+                occurrence.copy(status = "completed", completedAt = "2026-09-24T12:00:00Z"),
+            )
+        }
+        return dao
+    }
+
+    private fun newDatabase() = Room.databaseBuilder(context, SystemDatabase::class.java, databaseName)
+        .allowMainThreadQueries()
+        .addMigrations(SystemDatabase.MIGRATION_1_2, SystemDatabase.MIGRATION_2_3, SystemDatabase.MIGRATION_3_4, SystemDatabase.MIGRATION_4_5)
+        .build()
+
+    private fun occurrence(id: String = "occurrence-1", userId: String = USER_A) = CachedOccurrence(
         id = id,
-        userId = userId,
         taskId = "task-$id",
-        title = id,
+        title = "50 push-ups",
         notes = null,
-        scheduledFor = null,
-        allDay = false,
+        scheduledFor = "2026-09-25T00:00:00Z",
+        allDay = true,
         kind = "task",
         status = "pending",
         completedAt = null,
+        userId = userId,
     )
 
-    private fun openDatabase() = Room.databaseBuilder(context, SystemDatabase::class.java, databaseName)
-        .allowMainThreadQueries()
-        .addMigrations(
-            SystemDatabase.MIGRATION_1_2,
-            SystemDatabase.MIGRATION_2_3,
-            SystemDatabase.MIGRATION_3_4,
-            SystemDatabase.MIGRATION_4_5,
-        )
-        .build()
+    companion object {
+        private const val USER_A = "user-a"
+        private const val USER_B = "user-b"
+    }
 }
