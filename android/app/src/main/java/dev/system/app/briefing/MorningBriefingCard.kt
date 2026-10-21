@@ -11,10 +11,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /** A compact dashboard card; the host owns navigation and decides when to show it. */
 @Composable
@@ -23,6 +23,7 @@ internal fun MorningBriefingCard(
     onViewToday: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val locale = LocalLocale.current.platformLocale
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -30,7 +31,7 @@ internal fun MorningBriefingCard(
         ) {
             Text("Good morning", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text(
-                briefing.date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.getDefault())),
+                briefing.date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", locale)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -45,7 +46,7 @@ internal fun MorningBriefingCard(
 
             briefing.firstItem?.let { first ->
                 val timing = if (first.allDay) "All day" else first.time?.format(
-                    DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()),
+                    DateTimeFormatter.ofPattern("h:mm a", locale),
                 )
                 if (timing != null) {
                     Text("First item: $timing · ${first.title}", style = MaterialTheme.typography.bodyMedium)

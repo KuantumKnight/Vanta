@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -46,7 +47,6 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * Bounded seven-day planning surface. Data is supplied by the caller for the selected week; this
@@ -194,12 +194,13 @@ private fun WeekNavigationHeader(
     onCurrent: () -> Unit,
     onNext: () -> Unit,
 ) {
+    val locale = LocalLocale.current.platformLocale
     val lastDate = range.endExclusive.minusDays(1)
     val sameMonth = range.startInclusive.month == lastDate.month && range.startInclusive.year == lastDate.year
     val label = if (sameMonth) {
-        "${range.startInclusive.format(DateTimeFormatter.ofPattern("MMM d", Locale.getDefault()))}–${lastDate.format(DateTimeFormatter.ofPattern("d, yyyy", Locale.getDefault()))}"
+        "${range.startInclusive.format(DateTimeFormatter.ofPattern("MMM d", locale))}–${lastDate.format(DateTimeFormatter.ofPattern("d, yyyy", locale))}"
     } else {
-        "${range.startInclusive.format(DateTimeFormatter.ofPattern("MMM d", Locale.getDefault()))}–${lastDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault()))}"
+        "${range.startInclusive.format(DateTimeFormatter.ofPattern("MMM d", locale))}–${lastDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy", locale))}"
     }
     Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -264,6 +265,7 @@ private fun DaySummaryCard(
     flexibleCount: Int,
     onClick: () -> Unit,
 ) {
+    val locale = LocalLocale.current.platformLocale
     val colors = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.width(116.dp).height(128.dp).clickable(onClick = onClick),
@@ -275,7 +277,7 @@ private fun DaySummaryCard(
         Column(Modifier.fillMaxSize().padding(11.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Column {
                 Text(
-                    date.format(DateTimeFormatter.ofPattern("EEE", Locale.getDefault())).uppercase(Locale.getDefault()),
+                    date.format(DateTimeFormatter.ofPattern("EEE", locale)).uppercase(locale),
                     style = MaterialTheme.typography.labelMedium,
                     color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
                     fontWeight = FontWeight.Bold,
@@ -308,18 +310,19 @@ private fun SelectedDaySummary(
     schedule: DaySchedule?,
     onQuickCapture: () -> Unit,
 ) {
+    val locale = LocalLocale.current.platformLocale
     val plannedMinutes = schedule?.let(::sumPlannedMinutes) ?: 0L
     val calendarMinutes = schedule?.let(::sumCalendarMinutes) ?: 0L
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    date.format(DateTimeFormatter.ofPattern("EEEE", Locale.getDefault())),
+                    date.format(DateTimeFormatter.ofPattern("EEEE", locale)),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    date.format(DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.getDefault())),
+                    date.format(DateTimeFormatter.ofPattern("MMMM d, yyyy", locale)),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -423,6 +426,7 @@ private fun FreeTimeCard(freeMinutes: Long) {
 
 @Composable
 private fun FlexibleTaskCard(task: FlexibleTask, onSchedule: () -> Unit) {
+    val locale = LocalLocale.current.platformLocale
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -435,7 +439,7 @@ private fun FlexibleTaskCard(task: FlexibleTask, onSchedule: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(task.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 val duration = if (task.durationMinutes > 0) formatHours(task.durationMinutes.toLong()) else "Duration unset"
-                val deadline = task.deadlineAt?.let { " · due ${DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()).format(it.atZone(java.time.ZoneId.systemDefault()))}" }.orEmpty()
+                val deadline = task.deadlineAt?.let { " · due ${DateTimeFormatter.ofPattern("EEE, MMM d", locale).format(it.atZone(java.time.ZoneId.systemDefault()))}" }.orEmpty()
                 Text(
                     "$duration$deadline",
                     style = MaterialTheme.typography.bodySmall,

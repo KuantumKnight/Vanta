@@ -26,13 +26,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.TextStyle
-import java.util.Locale
 
 data class HabitTodayOccurrence(
     val occurrenceId: String,
@@ -248,11 +248,12 @@ private fun StreakMetricCard(label: String, value: Int, unit: String, modifier: 
 
 @Composable
 private fun WeekHistoryRow(days: List<HabitHistoryDay>) {
+    val locale = LocalLocale.current.platformLocale
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         days.take(7).forEach { day ->
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    day.date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
+                    day.date.dayOfWeek.getDisplayName(TextStyle.NARROW, locale),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
@@ -192,6 +193,7 @@ internal fun DashboardScreen(
     onDismissReplan: () -> Unit = {},
     calendarSettings: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
+    val locale = LocalLocale.current.platformLocale
     var search by remember { mutableStateOf("") }
     val today = LocalDate.now(TaskTimeZone)
     var quickCaptureOpen by remember { mutableStateOf(false) }
@@ -573,7 +575,7 @@ internal fun DashboardScreen(
             text = {
                 Text(
                     if (block.allDay) "All day · ${block.scheduleType.name} · ${block.source.name.replace('_', ' ')}"
-                    else "${DateTimeFormatter.ofPattern("EEE, MMM d", java.util.Locale.getDefault()).format(block.start.atZone(TaskTimeZone))} · " +
+                    else "${DateTimeFormatter.ofPattern("EEE, MMM d", locale).format(block.start.atZone(TaskTimeZone))} · " +
                         "${DateTimeFormatter.ofPattern("HH:mm").format(block.start.atZone(TaskTimeZone))}–" +
                         "${DateTimeFormatter.ofPattern("HH:mm").format(block.end.atZone(TaskTimeZone))} · " +
                         "${block.scheduleType.name} · ${block.source.name.replace('_', ' ')}",
