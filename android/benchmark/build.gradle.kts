@@ -14,7 +14,6 @@ android {
     }
 
     targetProjectPath = ":app"
-    targetVariant = "benchmark"
 }
 
 baselineProfile {
@@ -23,8 +22,8 @@ baselineProfile {
 }
 
 dependencies {
-    androidTestImplementation("androidx.benchmark:benchmark-macro-junit4:1.5.0")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    implementation("androidx.benchmark:benchmark-macro-junit4:1.5.0")
+    implementation("androidx.test.ext:junit:1.2.1")
+    implementation("androidx.test:runner:1.6.2")
+    implementation("androidx.test.uiautomator:uiautomator:2.3.0")
 }
