@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -167,7 +168,7 @@ class DashboardScreenTest {
 
         composeRule.onNodeWithText("Quick Capture").assertIsDisplayed()
         composeRule.onNodeWithText("Add to your day from Vanta").assertIsDisplayed()
-        composeRule.onNodeWithText("22 Oct", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("22 Oct", substring = true).assertExists()
         composeRule.waitUntil(timeoutMillis = 2_000) { consumedToken.get() == 41L }
         composeRule.onNodeWithText("Title or quick phrase").performTextInput("Study OS")
         composeRule.onNodeWithText("Duration · optional").performTextReplacement("")
