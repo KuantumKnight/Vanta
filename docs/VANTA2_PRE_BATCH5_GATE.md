@@ -2,11 +2,17 @@
 
 Status: PASS
 
-The release changes are committed on `vanta2-batch3-batch4-integration`; the worktree is clean. Unrelated CI, consent-site, and historical Batch 1/2 changes remain preserved in the named stash documented in [VANTA2_WORKSPACE_RECONCILIATION.md](VANTA2_WORKSPACE_RECONCILIATION.md). The local commit was not pushed. Applied migration `20261021100000` is included only as a documented source reconciliation to its recorded applied statements; no migration was deployed or reapplied.
+The release changes and Android CI preparation are committed locally on `vanta2-batch3-batch4-integration`; the worktree is clean. Unrelated CI, consent-site, and historical Batch 1/2 changes remain preserved in the named stash documented in [VANTA2_WORKSPACE_RECONCILIATION.md](VANTA2_WORKSPACE_RECONCILIATION.md). No commit was pushed. Applied migration `20261021100000` is included only as a documented source reconciliation to its recorded applied statements; no migration was deployed or reapplied.
 
 # Android Build
 
 Status: BLOCKED
+
+The Android CI release-gate workflow is prepared in `.github/workflows/ci.yml` on the local `vanta2-batch3-batch4-integration` branch. It adds Gradle configuration, JVM unit tests, lint, debug/release/test APK builds, and API 36 Room/UI instrumentation using an opt-in Gradle Managed Device. CI uses JDK 17 and non-production Firebase/Supabase placeholders; it performs no deployment and requires no production credentials.
+
+The managed-device instrumentation now includes a direct schema v7→v8 migration fixture with persisted Batch 4 rows and defaults/index checks, plus a MainActivity startup test that opens Room and reads initial settings. Existing Dashboard instrumentation covers Today rendering. Room schema export is enabled for CI artifact collection. These Android tests have not run in clean Linux CI.
+
+CI execution status: BLOCKED — the private branch does not exist on `origin`, and no hosted run is available for the current checkpoint. No push was made. This task's Git rules prohibit pushing without authorization. The exact next step is: `CI workflow is ready, but the branch must be pushed to GitHub to execute it.`
 
 Commands requested:
 
@@ -47,20 +53,20 @@ Neither command reached task configuration. No emulator or attached device is av
 
 Status: PASS
 
-From `supabase/`:
+From the repository root:
 
 ```powershell
-deno test -A functions/_shared
-deno check functions/plan-day/index.ts functions/mcp/index.ts functions/expand-schedules/index.ts
+deno test --config supabase/deno.json supabase/functions/_shared
+deno check --config supabase/deno.json supabase/functions/mcp/index.ts supabase/functions/expand-schedules/index.ts supabase/functions/sync-push/index.ts supabase/functions/send-reminders/index.ts
 ```
 
-The shared suite passed: 34 passed, 0 failed. All three Edge Function checks passed. The targeted changed-file formatting check also passed; the broader formatter scan flags three untouched legacy files: `functions/sync-push/index.ts`, `functions/_shared/admin.ts`, and `functions/_shared/fcm.ts`.
+The shared suite passed: 34 passed, 0 failed. Four Edge Function checks passed (`mcp`, `expand-schedules`, `sync-push`, and `send-reminders`). The targeted changed-file formatting check also passed; the broader formatter scan flags three untouched legacy files: `functions/sync-push/index.ts`, `functions/_shared/admin.ts`, and `functions/_shared/fcm.ts`.
 
 # Room Migration Chain
 
 Status: BLOCKED
 
-Room version 1→8 has a contiguous registered migration path and source-level table, column, default, and index checks. Migration tests cover version 1, legacy versions 3–5, and Batch 2 version 6 through version 8. These tests have not run: Android Gradle configuration is blocked by the Java selector failure, and no emulator/device is available.
+Room version 1→8 has a contiguous registered migration path and source-level table, column, default, and index checks. Migration tests cover version 1, legacy versions 3–5, Batch 2 version 6, and direct Batch 4 version 7 through version 8. The new v7 fixture also checks migrated data, defaults, tables, and indexes. KSP now exports the Room 8 schema during CI for artifact collection. These tests have not run because the prepared CI workflow has not been pushed/executed and local Gradle configuration is blocked by the Java selector failure.
 
 # Supabase Disposable Migration Test
 
@@ -96,7 +102,7 @@ Status: NOT READY
 
 Status: PARTIAL
 
-Source review and disposable pgTAP found owner-scoped reads/writes, explicit `daily_reviews` table privileges, restricted function execution, private sync state, controlled definer search paths, and no need for service credentials in Android. The target Data API public schema is exposed and anonymous table access is denied. No production SQL changed. Google OAuth Console configuration and signed-device flows remain unverified. The security advisor also reported intentional authenticated `SECURITY DEFINER` RPCs and private tables without RLS; see the migration audit for the ACL evidence.
+Source review and disposable pgTAP found owner-scoped reads/writes, explicit `daily_reviews` table privileges, restricted function execution, private sync state, controlled definer search paths, and no need for service credentials in Android. The target Data API public schema is exposed and anonymous table access is denied. No production SQL changed. Google OAuth Console configuration and signed-device flows remain unverified. The security advisor's authenticated `SECURITY DEFINER` findings and private tables without RLS are documented as defense-in-depth advisories; see the migration audit for the ACL evidence.
 
 # Performance
 
@@ -108,7 +114,7 @@ Static review found bounded date-range analytics/history reads, a bounded week p
 
 Status: PASS
 
-The release gate is committed and `git status --short --branch` is clean. The named stash preserves every out-of-scope modified/untracked path and its object ID and recovery command are recorded in [VANTA2_WORKSPACE_RECONCILIATION.md](VANTA2_WORKSPACE_RECONCILIATION.md). No local secrets, generated APK, or Gradle output is included in the release commit.
+The release-gate work and CI preparation are committed locally and `git status --short --branch` is clean. The named stash preserves every out-of-scope modified/untracked path and its object ID and recovery command are recorded in [VANTA2_WORKSPACE_RECONCILIATION.md](VANTA2_WORKSPACE_RECONCILIATION.md). No local secrets, generated APK, or Gradle output is included in the commit.
 
 # Batch 5
 
@@ -118,19 +124,21 @@ NOT READY FOR BATCH 5
 
 | Gate | Status |
 |---|---|
-| Java loopback | FAIL — selector/loopback failure in the available JDKs |
-| Gradle configuration | FAIL — Gradle cannot reach project configuration |
-| Android unit | FAIL — blocked before test task discovery |
-| Android lint | FAIL — blocked before task discovery |
-| Debug APK | FAIL — blocked before task discovery |
-| Release APK/AAB | FAIL — blocked before task discovery |
-| Test APK | FAIL — blocked before task discovery |
-| Room migrations | FAIL — instrumentation suite could not run |
-| Deno | PASS — 34 shared tests and all three checks passed |
+| Java loopback (local) | FAIL — selector/loopback failure; CI classification pending |
+| Android CI workflow | PREPARED — pending a push to trigger hosted CI |
+| Gradle configuration | BLOCKED — clean Linux CI has not run |
+| Android unit | BLOCKED — clean Linux CI has not run |
+| Android lint | BLOCKED — clean Linux CI has not run |
+| Debug APK | BLOCKED — clean Linux CI has not run |
+| Release APK | BLOCKED — clean Linux CI has not run |
+| Test APK | BLOCKED — clean Linux CI has not run |
+| Room migrations | BLOCKED — instrumentation suite has not run |
+| Instrumentation | BLOCKED — managed-device suite has not run |
+| Deno | PASS — 34 shared tests and four Edge Function checks passed |
 | Supabase migrations | PASS — nine pending migrations applied to the disposable baseline |
 | pgTAP/RLS | PASS — 153 assertions across nine suites |
 | Data API grants | PASS — ACL matrix and live authenticated/anonymous behavior verified |
-| Secrets | PASS — no secret patterns detected in the pending diff |
+| Secrets | PASS — changed-file scan found no credential patterns; CI uses placeholders only |
 | Workspace clean | PASS — after the documented commit |
 
 NOT READY FOR BATCH 5

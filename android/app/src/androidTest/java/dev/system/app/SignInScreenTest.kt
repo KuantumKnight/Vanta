@@ -10,6 +10,8 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -30,6 +32,15 @@ class SignInScreenTest {
         assertEquals("Vanta", appLabel)
         assertEquals("Vanta", widgetLabel)
         composeRule.onNodeWithText("Vanta").assertIsDisplayed()
+    }
+
+    @Test
+    fun mainActivityStartsAndInitializesLocalRepositories() {
+        val application = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as SystemApplication
+
+        application.database.openHelper.writableDatabase
+        runBlocking { application.userPreferencesRepository.preferences.first() }
+        composeRule.onNodeWithText("Continue with email").assertIsDisplayed()
     }
 
     @Test

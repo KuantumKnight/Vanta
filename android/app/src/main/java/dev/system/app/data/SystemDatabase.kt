@@ -645,7 +645,7 @@ internal data class OccurrenceDelta(
 @Database(
     entities = [CachedOccurrence::class, PendingCompletion::class, PendingMutation::class, SyncCheckpoint::class, BootstrapOccurrence::class, PendingFocusReconciliation::class, OccurrenceHistory::class, FocusSessionHistory::class, DailyReviewEntry::class, PendingHabitSkip::class],
     version = 8,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class SystemDatabase : RoomDatabase() {
     abstract fun systemDao(): SystemDao

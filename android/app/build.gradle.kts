@@ -8,6 +8,10 @@ plugins {
     id("androidx.baselineprofile")
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
@@ -16,6 +20,8 @@ val localProperties = Properties().apply {
     val props = rootProject.file("local.properties")
     if (props.exists()) props.inputStream().use(::load)
 }
+// Keep the managed CI emulator opt-in so ordinary developer builds do not provision it.
+val ciManagedDeviceEnabled = providers.gradleProperty("ciManagedDevice").orNull == "true"
 val supabaseUrl = localProperties.getProperty("SUPABASE_URL", "https://example.supabase.co")
 val supabasePublishableKey = localProperties.getProperty("SUPABASE_PUBLISHABLE_KEY", "")
 
@@ -32,6 +38,21 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"$supabasePublishableKey\"")
+    }
+
+    if (ciManagedDeviceEnabled) {
+        testOptions {
+            managedDevices {
+                localDevices {
+                    create("ciApi36") {
+                        device = "Pixel 2"
+                        apiLevel = 36
+                        systemImageSource = "aosp"
+                        require64Bit = true
+                    }
+                }
+            }
+        }
     }
 
     buildFeatures {
