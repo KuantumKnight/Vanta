@@ -12,23 +12,23 @@ Commands requested:
 
 ```powershell
 .\gradlew.bat help --no-daemon --stacktrace --debug
-.\gradlew.bat assembleDebug
-.\gradlew.bat assembleRelease
+.\gradlew.bat assembleDebug --no-daemon
+.\gradlew.bat assembleRelease --no-daemon
 ```
 
-The first command fails before settings/project configuration or task discovery. The first root exception is `java.io.IOException: Unable to establish loopback connection`, caused by `java.net.SocketException: Invalid argument: connect` in `PipeImpl$Initializer$LoopbackConnector` while `Selector.open()` constructs `WEPollSelectorImpl`. No Android build task reached compilation. Both installed Temurin 17 JDKs reproduce the selector failure; raw TCP loopback works. A fresh Gradle user home and `--no-daemon` do not change it. See [ANDROID_GRADLE_ENV_BLOCKER.md](ANDROID_GRADLE_ENV_BLOCKER.md) for the full evidence and recommended host-terminal check.
+The first command fails before settings/project configuration or task discovery. The first root exception is `java.io.IOException: Unable to establish loopback connection`, caused by `java.net.SocketException: Invalid argument: connect` in `PipeImpl$Initializer$LoopbackConnector` while `Selector.open()` constructs `WEPollSelectorImpl`. No Android build task reached compilation. Both installed Temurin 17 JDKs and a checksum-verified Microsoft OpenJDK 21.0.12.1 reproduce the selector failure; raw IPv4, IPv6, and `localhost` TCP loopback works. Retrying `help --no-daemon --stacktrace` with the verified JDK 21 also fails in Gradle's daemon connection before project configuration. Only the `help` command was run in this retry; debug/release APK, unit, lint, instrumentation-APK, and benchmark tasks did not run. The project includes a `:benchmark` module and Baseline Profile configuration (`android/settings.gradle.kts`, `android/app/build.gradle.kts`, and `android/benchmark/build.gradle.kts`), but task discovery and benchmark compilation remain blocked. See [JAVA_LOOPBACK_ROOT_CAUSE.md](JAVA_LOOPBACK_ROOT_CAUSE.md) for the probe results and [ANDROID_GRADLE_ENV_BLOCKER.md](ANDROID_GRADLE_ENV_BLOCKER.md) for the recommended host-terminal check.
 
 # Android Unit Tests
 
 Status: BLOCKED
 
-`.\gradlew.bat testDebugUnitTest` was not runnable because Gradle fails in selector initialization before project configuration. Android unit-test results are unavailable.
+`.\gradlew.bat testDebugUnitTest --no-daemon` was not run because the preceding `help` command fails in selector initialization before project configuration. Android unit-test results are unavailable.
 
 # Android Lint
 
 Status: BLOCKED
 
-`.\gradlew.bat lintDebug` was not runnable because Gradle fails in selector initialization before project configuration.
+`.\gradlew.bat lintDebug --no-daemon` was not run because the preceding `help` command fails in selector initialization before project configuration.
 
 # Android Instrumentation
 
@@ -37,8 +37,8 @@ Status: BLOCKED
 Commands requested:
 
 ```powershell
-.\gradlew.bat assembleDebugAndroidTest
-.\gradlew.bat connectedDebugAndroidTest
+.\gradlew.bat assembleDebugAndroidTest --no-daemon
+.\gradlew.bat connectedDebugAndroidTest --no-daemon
 ```
 
 Neither command reached task configuration. No emulator or attached device is available, so Room migration instrumentation and device flows remain unverified.
@@ -66,19 +66,19 @@ Room version 1→8 has a contiguous registered migration path and source-level t
 
 Status: BLOCKED
 
-`npx --no-install supabase test db --local` stopped at `Connecting to local database...` with `ECONNREFUSED 127.0.0.1:54322`. Docker cannot connect to `npipe:////./pipe/dockerDesktopLinuxEngine`; no local PostgreSQL binaries or existing Supabase development branch were available. No disposable environment was created and no production test or migration was run. Therefore application of the eight pending migrations and their pgTAP tests is unverified.
+`npx --no-install supabase test db --local` stopped at `Connecting to local database...` with `ECONNREFUSED 127.0.0.1:54322`. Docker cannot connect to `npipe:////./pipe/dockerDesktopLinuxEngine`; no local PostgreSQL binaries or existing Supabase development branch were available. No disposable environment was created and no production test or migration was run. Therefore application of the nine pending migrations and their pgTAP tests is unverified.
 
 # Supabase RLS / Grants
 
 Status: PARTIAL
 
-Static review covers owner-scoped RLS/RPCs, function execute privileges, private sync tables, and definer search paths. The pending `daily_reviews` migration explicitly revokes table access from PostgreSQL `PUBLIC`, `anon`, and `authenticated`, then grants authenticated `SELECT`; writes use an owner-derived RPC. Four pgTAP privilege assertions were added. Owner-isolation, anonymous-denial, and grant behavior have not been executed against PostgreSQL.
+Static review covers owner-scoped RLS/RPCs, function execute privileges, private sync tables, and definer search paths. The pending `daily_reviews` migration explicitly revokes table access from PostgreSQL `PUBLIC`, `anon`, and `authenticated`, then grants authenticated `SELECT`; writes use an owner-derived RPC. Three new aggregate pgTAP assertions cover all four table operations for `anon`, `authenticated`, and `service_role` across ten public objects. Existing owner-isolation tests and the grant tests have not been executed against PostgreSQL.
 
 # Data API Exposure
 
 Status: PARTIAL
 
-The intended new public object is `public.daily_reviews` with authenticated read access only; Batch 3/4 sync and reschedule state is in revoked `private` tables. Local `supabase/config.toml` exposes `public`, but a read-only target query returned null for `pgrst.db_schemas`, so target Data API exposure is unknown. `daily_reviews` is absent remotely because its migration is pending.
+The static intended role matrix for ten Vanta public objects is recorded in [VANTA2_MIGRATION_AUDIT.md](VANTA2_MIGRATION_AUDIT.md). It gives `anon` no table privileges, limits `authenticated` to owner-filtered reads plus token disable updates, and gives the trusted backend role explicit table access; `goal_progress` is read-only for `service_role`. A new pending grant migration closes the source-level omission for service-role access to `goal_progress` and makes the pending `daily_reviews` backend ACL explicit. The new matrix pgTAP test is not run. Local `supabase/config.toml` exposes `public`, but a read-only target query returned null for `pgrst.db_schemas`, so target Data API exposure remains unknown. The migration and privileges are absent remotely because they are pending.
 
 # Google Calendar Configuration
 
