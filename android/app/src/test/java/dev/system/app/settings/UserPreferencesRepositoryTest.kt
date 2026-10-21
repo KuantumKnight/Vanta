@@ -6,8 +6,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -54,7 +56,7 @@ class UserPreferencesRepositoryTest {
             showPlannedVsActual = true,
         )
         DataStoreUserPreferencesRepository(firstStore).update { expected }
-        firstScope.cancel()
+        firstScope.coroutineContext[Job]?.cancelAndJoin()
 
         val secondScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val secondStore = PreferenceDataStoreFactory.create(scope = secondScope) { file }
