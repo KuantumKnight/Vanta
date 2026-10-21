@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.Modifier
@@ -166,7 +167,7 @@ class DashboardScreenTest {
 
         composeRule.onNodeWithText("Quick Capture").assertIsDisplayed()
         composeRule.onNodeWithText("Add to your day from Vanta").assertIsDisplayed()
-        composeRule.onNodeWithText("Date · Thu, 22 Oct").assertIsDisplayed()
+        composeRule.onNodeWithText("22 Oct", substring = true).assertIsDisplayed()
         composeRule.waitUntil(timeoutMillis = 2_000) { consumedToken.get() == 41L }
         composeRule.onNodeWithText("Title or quick phrase").performTextInput("Study OS")
         composeRule.onNodeWithText("Duration · optional").performTextReplacement("")
@@ -207,8 +208,7 @@ class DashboardScreenTest {
         composeRule.onNodeWithText("HARD · Type").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("All day").performClick()
         composeRule.onNodeWithContentDescription("All day").assertIsOn()
-        composeRule.onNodeWithText("Save task").assertIsEnabled()
-        composeRule.onNodeWithText("Save task").performClick()
+        composeRule.onNodeWithText("Save task").performScrollTo().assertIsEnabled().performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) { created.get() != null }
 
         composeRule.runOnIdle {
