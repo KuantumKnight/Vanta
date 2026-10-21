@@ -430,6 +430,7 @@ class SystemDatabaseMigrationTest {
                 notes = null,
                 scheduledFor = "2026-10-22T10:00:00Z",
                 allDay = false,
+                kind = "task",
                 status = "pending",
                 completedAt = null,
                 userId = "user-a",

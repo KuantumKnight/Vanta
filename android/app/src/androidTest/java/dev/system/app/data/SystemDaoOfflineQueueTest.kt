@@ -69,12 +69,12 @@ class SystemDaoOfflineQueueTest {
     fun permanentFailureIsDeadLetteredAndDoesNotBlockLaterSuccess() = runBlocking {
         val dao = queuedDao(occurrence("permanent-a"), occurrence("valid-b"))
         val replayed = mutableListOf<String>()
-        CompletionQueueReplayer(dao) { item ->
+        CompletionQueueReplayer(dao, completeOnServer = { item ->
             replayed += item.idempotencyKey
             if (item.occurrenceId == "permanent-a") {
                 ReplayResult(ReplayOutcome.PERMANENT_FAILURE, "NOT_FOUND", "Occurrence was removed.")
             } else ReplayResult(ReplayOutcome.SUCCESS)
-        }.replay(USER_A)
+        }).replay(USER_A)
 
         assertEquals(listOf("key-permanent-a", "key-valid-b"), replayed)
         val retained = dao.pendingCompletions(USER_A).single()
@@ -87,11 +87,15 @@ class SystemDaoOfflineQueueTest {
     fun retryableFailureSchedulesBackoffAndDoesNotBlockLaterSuccess() = runBlocking {
         val dao = queuedDao(occurrence("retry-a"), occurrence("valid-b"))
         val replayed = mutableListOf<String>()
-        val summary = CompletionQueueReplayer(dao, now = { 1_000L }) { item ->
-            replayed += item.idempotencyKey
-            if (item.occurrenceId == "retry-a") throw IOException("network disconnected")
-            ReplayResult(ReplayOutcome.SUCCESS)
-        }.replay(USER_A)
+        val summary = CompletionQueueReplayer(
+            dao,
+            completeOnServer = { item ->
+                replayed += item.idempotencyKey
+                if (item.occurrenceId == "retry-a") throw IOException("network disconnected")
+                ReplayResult(ReplayOutcome.SUCCESS)
+            },
+            now = { 1_000L },
+        ).replay(USER_A)
 
         assertEquals(listOf("key-retry-a", "key-valid-b"), replayed)
         val retained = dao.pendingCompletions(USER_A).single()
@@ -105,7 +109,7 @@ class SystemDaoOfflineQueueTest {
     @Test
     fun alreadyAppliedCompletionClearsQueueEntry() = runBlocking {
         val dao = queuedDao(occurrence("already-done"))
-        CompletionQueueReplayer(dao) { ReplayResult(ReplayOutcome.ALREADY_APPLIED) }.replay(USER_A)
+        CompletionQueueReplayer(dao, completeOnServer = { ReplayResult(ReplayOutcome.ALREADY_APPLIED) }).replay(USER_A)
         assertTrue(dao.pendingCompletions(USER_A).isEmpty())
     }
 
@@ -113,16 +117,16 @@ class SystemDaoOfflineQueueTest {
     fun authRequiredStopsReplayAndRetainsLaterItems() = runBlocking {
         val dao = queuedDao(occurrence("auth-a"), occurrence("auth-b"))
         val firstPass = mutableListOf<String>()
-        CompletionQueueReplayer(dao) { item ->
+        CompletionQueueReplayer(dao, completeOnServer = { item ->
             firstPass += item.idempotencyKey
             ReplayResult(ReplayOutcome.AUTH_REQUIRED, "AUTH_REQUIRED", "Sign in again.")
-        }.replay(USER_A)
+        }).replay(USER_A)
         assertEquals(listOf("key-auth-a"), firstPass)
         assertEquals(2, dao.pendingCompletions(USER_A).size)
         assertEquals("AUTH_REQUIRED", dao.pendingCompletions(USER_A).first().lastErrorCode)
 
         dao.resetAuthRequiredCompletions(USER_A)
-        CompletionQueueReplayer(dao) { ReplayResult(ReplayOutcome.SUCCESS) }.replay(USER_A)
+        CompletionQueueReplayer(dao, completeOnServer = { ReplayResult(ReplayOutcome.SUCCESS) }).replay(USER_A)
         assertTrue(dao.pendingCompletions(USER_A).isEmpty())
     }
 
@@ -131,17 +135,25 @@ class SystemDaoOfflineQueueTest {
         val dao = queuedDao(occurrence("commit-lost"))
         val serverApplied = mutableSetOf<String>()
         val keysSeen = mutableListOf<String>()
-        CompletionQueueReplayer(dao, now = { 1_000L }) { item ->
-            keysSeen += item.idempotencyKey
-            if (serverApplied.add(item.idempotencyKey)) throw IOException("response timed out after commit")
-            ReplayResult(ReplayOutcome.ALREADY_APPLIED)
-        }.replay(USER_A)
+        CompletionQueueReplayer(
+            dao,
+            completeOnServer = { item ->
+                keysSeen += item.idempotencyKey
+                if (serverApplied.add(item.idempotencyKey)) throw IOException("response timed out after commit")
+                ReplayResult(ReplayOutcome.ALREADY_APPLIED)
+            },
+            now = { 1_000L },
+        ).replay(USER_A)
 
-        CompletionQueueReplayer(dao, now = { 31_001L }) { item ->
-            keysSeen += item.idempotencyKey
-            if (serverApplied.contains(item.idempotencyKey)) ReplayResult(ReplayOutcome.ALREADY_APPLIED)
-            else ReplayResult(ReplayOutcome.SUCCESS)
-        }.replay(USER_A)
+        CompletionQueueReplayer(
+            dao,
+            completeOnServer = { item ->
+                keysSeen += item.idempotencyKey
+                if (serverApplied.contains(item.idempotencyKey)) ReplayResult(ReplayOutcome.ALREADY_APPLIED)
+                else ReplayResult(ReplayOutcome.SUCCESS)
+            },
+            now = { 31_001L },
+        ).replay(USER_A)
 
         assertEquals(listOf("key-commit-lost", "key-commit-lost"), keysSeen)
         assertTrue(dao.pendingCompletions(USER_A).isEmpty())

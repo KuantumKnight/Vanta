@@ -24,13 +24,15 @@ class SignInScreenTest {
     @Test
     fun publicAppIdentityUsesVanta() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val appLabel = context.packageManager.getApplicationLabel(context.applicationInfo).toString()
-        val widgetLabel = context.packageManager.getReceiverInfo(
+        val appLabel = context.getString(context.applicationInfo.labelRes)
+        val widgetInfo = context.packageManager.getReceiverInfo(
             android.content.ComponentName(context, dev.system.app.widget.SystemWidgetReceiver::class.java),
-        ).loadLabel(context.packageManager).toString()
+            android.content.pm.PackageManager.ComponentInfoFlags.of(0L),
+        )
+        val widgetLabel = context.getString(widgetInfo.labelRes)
 
         assertEquals("Vanta", appLabel)
-        assertEquals("Vanta", widgetLabel)
+        assertEquals("Vanta · NOW / NEXT", widgetLabel)
         composeRule.onNodeWithText("Vanta").assertIsDisplayed()
     }
 

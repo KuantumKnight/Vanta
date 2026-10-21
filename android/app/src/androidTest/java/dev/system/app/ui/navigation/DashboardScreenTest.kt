@@ -2,22 +2,24 @@ package dev.system.app.ui.navigation
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNode
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.Modifier
 import dev.system.app.data.CachedOccurrence
+import dev.system.app.settings.UserPreferences
 import dev.system.app.ui.components.TaskTimeZone
 import dev.system.app.ui.quickcapture.QuickCaptureLaunchRequest
+import dev.system.app.ui.quickcapture.QuickCaptureSubmission
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -42,6 +44,16 @@ class DashboardScreenTest {
                     goals = emptyList(),
                     goalsLoading = false,
                     goalsError = null,
+                    habits = emptyList(),
+                    selectedHabitDetail = null,
+                    morningBriefing = null,
+                    analyticsSummary = null,
+                    showPlannedVsActual = false,
+                    eveningReviewSummary = null,
+                    dailyReviewNote = "",
+                    dailyReviewFinished = false,
+                    resolvedReviewOccurrenceIds = emptySet(),
+                    userPreferences = UserPreferences(),
                     notificationPermissionGranted = true,
                     notificationSettingsRecommended = false,
                     onEnableNotifications = {},
@@ -54,8 +66,8 @@ class DashboardScreenTest {
         }
 
         composeRule.onNodeWithText("Study task").assertIsDisplayed()
-        composeRule.onNode(hasSetTextAction()).performTextInput("not found")
-        composeRule.onNodeWithText("Study task").assertDoesNotExist()
+        composeRule.onNodeWithText("Search tasks").performTextInput("not found")
+        assertTrue(composeRule.onAllNodesWithText("Study task").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText("No matching tasks").assertIsDisplayed()
     }
 
@@ -77,6 +89,16 @@ class DashboardScreenTest {
                     goals = emptyList(),
                     goalsLoading = false,
                     goalsError = null,
+                    habits = emptyList(),
+                    selectedHabitDetail = null,
+                    morningBriefing = null,
+                    analyticsSummary = null,
+                    showPlannedVsActual = false,
+                    eveningReviewSummary = null,
+                    dailyReviewNote = "",
+                    dailyReviewFinished = false,
+                    resolvedReviewOccurrenceIds = emptySet(),
+                    userPreferences = UserPreferences(),
                     notificationPermissionGranted = true,
                     notificationSettingsRecommended = false,
                     onEnableNotifications = {},
@@ -96,7 +118,7 @@ class DashboardScreenTest {
     @Test
     fun widgetLaunchOpensQuickCaptureAndCreatesAnUnscheduledTask() {
         val selectedTab = mutableStateOf(DashboardTab.Today)
-        val created = AtomicReference<List<Any?>?>(null)
+        val created = AtomicReference<QuickCaptureSubmission?>(null)
         val consumedToken = AtomicReference<Long?>(null)
         val requestDate = LocalDate.of(2026, 10, 22)
         composeRule.setContent {
@@ -113,6 +135,16 @@ class DashboardScreenTest {
                     goals = emptyList(),
                     goalsLoading = false,
                     goalsError = null,
+                    habits = emptyList(),
+                    selectedHabitDetail = null,
+                    morningBriefing = null,
+                    analyticsSummary = null,
+                    showPlannedVsActual = false,
+                    eveningReviewSummary = null,
+                    dailyReviewNote = "",
+                    dailyReviewFinished = false,
+                    resolvedReviewOccurrenceIds = emptySet(),
+                    userPreferences = UserPreferences(),
                     notificationPermissionGranted = true,
                     notificationSettingsRecommended = false,
                     onEnableNotifications = {},
@@ -122,8 +154,8 @@ class DashboardScreenTest {
                     onComplete = {},
                     quickCaptureRequest = QuickCaptureLaunchRequest(41L, requestDate, "now_next_widget"),
                     onQuickCaptureRequestConsumed = { consumedToken.set(it) },
-                    onCreateTask = { title, notes, scheduledFor, allDay, duration ->
-                        created.set(listOf(title, notes, scheduledFor, allDay, duration))
+                    onCreateTask = { submission ->
+                        created.set(submission)
                     },
                 )
             }
@@ -133,19 +165,25 @@ class DashboardScreenTest {
         composeRule.onNodeWithText("Add to your day from Vanta").assertIsDisplayed()
         composeRule.waitUntil(timeoutMillis = 2_000) { consumedToken.get() == 41L }
         composeRule.onNodeWithText("Title or quick phrase").performTextInput("Study OS")
+        composeRule.onNodeWithText("Duration · optional").performTextReplacement("")
         composeRule.onNodeWithContentDescription("Schedule this task").performClick()
         composeRule.onNodeWithText("Save task").performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) { created.get() != null }
 
         composeRule.runOnIdle {
-            assertEquals(listOf("Study OS", null, null, false, null), created.get())
+            val submission = checkNotNull(created.get())
+            assertEquals("Study OS", submission.title)
+            assertEquals(null, submission.notes)
+            assertEquals(null, submission.scheduledFor)
+            assertEquals(false, submission.allDay)
+            assertEquals(null, submission.durationMinutes)
         }
     }
 
     @Test
     fun quickCaptureAllDaySubmissionUsesSelectedLocalDate() {
         val selectedTab = mutableStateOf(DashboardTab.Today)
-        val created = AtomicReference<List<Any?>?>(null)
+        val created = AtomicReference<QuickCaptureSubmission?>(null)
         val requestDate = LocalDate.of(2026, 10, 21)
         composeRule.setContent {
             MaterialTheme {
@@ -161,6 +199,16 @@ class DashboardScreenTest {
                     goals = emptyList(),
                     goalsLoading = false,
                     goalsError = null,
+                    habits = emptyList(),
+                    selectedHabitDetail = null,
+                    morningBriefing = null,
+                    analyticsSummary = null,
+                    showPlannedVsActual = false,
+                    eveningReviewSummary = null,
+                    dailyReviewNote = "",
+                    dailyReviewFinished = false,
+                    resolvedReviewOccurrenceIds = emptySet(),
+                    userPreferences = UserPreferences(),
                     notificationPermissionGranted = true,
                     notificationSettingsRecommended = false,
                     onEnableNotifications = {},
@@ -170,24 +218,27 @@ class DashboardScreenTest {
                     onComplete = {},
                     quickCaptureRequest = QuickCaptureLaunchRequest(42L, requestDate, "today_compact_widget"),
                     onQuickCaptureRequestConsumed = {},
-                    onCreateTask = { title, notes, scheduledFor, allDay, duration ->
-                        created.set(listOf(title, notes, scheduledFor, allDay, duration))
+                    onCreateTask = { submission ->
+                        created.set(submission)
                     },
                 )
             }
         }
 
         composeRule.onNodeWithText("Title or quick phrase").performTextInput("Holiday")
+        composeRule.onNodeWithText("Duration · optional").performTextReplacement("")
+        composeRule.onNodeWithText("SOFT · Type").performClick()
+        composeRule.onNodeWithText("HARD").performClick()
         composeRule.onNodeWithContentDescription("All day").performClick()
         composeRule.onNodeWithText("Save task").performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) { created.get() != null }
 
         composeRule.runOnIdle {
-            val values = checkNotNull(created.get())
-            assertEquals("Holiday", values[0])
-            assertEquals(requestDate.atStartOfDay(TaskTimeZone).toInstant(), values[2])
-            assertEquals(true, values[3])
-            assertEquals(null, values[4])
+            val submission = checkNotNull(created.get())
+            assertEquals("Holiday", submission.title)
+            assertEquals(requestDate.atStartOfDay(TaskTimeZone).toInstant(), submission.scheduledFor)
+            assertEquals(true, submission.allDay)
+            assertEquals(null, submission.durationMinutes)
         }
     }
 
