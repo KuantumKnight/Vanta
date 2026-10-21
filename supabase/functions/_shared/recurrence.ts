@@ -306,11 +306,12 @@ export function getOccurrences(
     throw new Error("Only Asia/Kolkata schedules are supported.");
   }
   const validatedRule = validateRRule(schedule.rrule);
+  // Asia/Kolkata has a fixed UTC+05:30 offset without DST. Expand in UTC so
+  // RRULE and the stored RDATE/EXDATE instants share the same time basis.
   const dtstart = new Date(schedule.dtstart);
   const options = {
     ...RRule.parseString(validatedRule),
     dtstart,
-    tzid: TIME_ZONE,
   };
   const set = new RRuleSet();
   set.rrule(new RRule(options));
