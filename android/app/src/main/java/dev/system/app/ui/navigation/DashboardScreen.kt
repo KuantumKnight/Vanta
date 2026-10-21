@@ -373,7 +373,7 @@ internal fun DashboardScreen(
                                     ).sumOf { it.durationMinutes },
                                     onRequestPlan = { onRequestDayPlan(context) },
                                     onApplyPlan = { onApplyDayPlan(context, it) },
-                                    onAdjust = onCancelDayPlan,
+                                    onAdjust = { onCancelDayPlan() },
                                     onCancel = onCancelDayPlan,
                                 )
                             }

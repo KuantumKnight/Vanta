@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.system.app.planner.PlanProposal
 import dev.system.app.planner.PlanningContext
+import dev.system.app.planner.ai.PlanValidationResult
 import dev.system.app.planner.ai.validatePlanProposal
 import dev.system.app.ui.planner.ai.PlanMyDayUiState.Preview
 import java.time.format.DateTimeFormatter

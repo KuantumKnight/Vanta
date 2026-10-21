@@ -11,7 +11,7 @@ import dev.system.app.settings.UserPreferencesRepository
 import dev.system.app.planner.PlanProposal
 import dev.system.app.planner.SchedulePriority
 import dev.system.app.planner.ScheduleType
-import io.github.jan.supabase.auth.currentAccessTokenOrNull
+import io.github.jan.supabase.auth.currentSessionOrNull
 import dev.system.app.sync.SyncWorker
 import dev.system.app.sync.SyncPassCoordinator
 import dev.system.app.widget.SystemWidget
@@ -410,7 +410,7 @@ class SystemRepository(
 
     /** Expose only an ephemeral session token to authenticated, optional planner requests. */
     suspend fun planningAccessToken(): String? =
-        if (currentUser == null) null else client.auth.currentAccessTokenOrNull()
+        if (currentUser == null) null else client.auth.currentSessionOrNull()?.accessToken
 
     /** Stores an explicitly approved multi-item replan atomically in Room, then uses the existing sync queue. */
     suspend fun applyReschedulePlan(
@@ -668,7 +668,7 @@ class SystemRepository(
                 }
 
                 dao.resetAuthRequiredCompletions(userId)
-                val replaySummary = CompletionQueueReplayer(dao) { item ->
+                val replaySummary = CompletionQueueReplayer(dao, completeOnServer = { item ->
                     val response = client.postgrest.rpc(
                         "system_complete_task_occurrence",
                         CompletionParams(item.occurrenceId, item.idempotencyKey),
@@ -682,7 +682,7 @@ class SystemRepository(
                             "The server returned an unknown completion result.",
                         )
                     }
-                }.replay(userId)
+                }).replay(userId)
 
                 if (replaySummary.authRequired) {
                     setRemoteAuth(RemoteAuthAvailability.REAUTH_REQUIRED)

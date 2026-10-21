@@ -635,7 +635,7 @@ interface SystemDao {
 
 }
 
-internal data class OccurrenceDelta(
+data class OccurrenceDelta(
     val revision: Long,
     val occurrenceId: String,
     val isDeleted: Boolean,

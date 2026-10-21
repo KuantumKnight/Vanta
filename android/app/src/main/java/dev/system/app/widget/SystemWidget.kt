@@ -27,7 +27,7 @@ import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
+import androidx.glance.layout.RowScope.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -113,7 +113,7 @@ private fun NowNextContent(
                     WidgetLabel("NOW", colors.accent)
                     Row(modifier = GlanceModifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = GlanceModifier.defaultWeight().clickable(openApp)) {
-                            Text(current.title, style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = colors.foreground), maxLines = 1)
+                            Text(current.title, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = 15.sp, color = colors.foreground), maxLines = 1)
                             current.end?.let { end ->
                                 Text("Ends ${clockLabel(end)}", style = TextStyle(fontSize = 12.sp, color = colors.muted))
                             }

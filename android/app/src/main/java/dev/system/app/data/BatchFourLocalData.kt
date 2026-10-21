@@ -104,14 +104,14 @@ data class PendingHabitSkip(
 )
 
 fun dev.system.app.focus.FocusSession.toHistory(): FocusSessionHistory = FocusSessionHistory(
-    sessionId = "${session.userId}:${session.occurrenceId}:${session.startedAtEpochMillis}",
-    userId = session.userId,
-    occurrenceId = session.occurrenceId,
-    occurrenceTitle = session.occurrenceTitle,
-    plannedDurationSeconds = session.plannedDurationSeconds,
-    startedAtEpochMillis = session.startedAtEpochMillis,
-    finishedAtEpochMillis = session.finishedAtEpochMillis,
-    status = session.status.name,
+    sessionId = "$userId:$occurrenceId:$startedAtEpochMillis",
+    userId = userId,
+    occurrenceId = occurrenceId,
+    occurrenceTitle = occurrenceTitle,
+    plannedDurationSeconds = plannedDurationSeconds,
+    startedAtEpochMillis = startedAtEpochMillis,
+    finishedAtEpochMillis = finishedAtEpochMillis,
+    status = status.name,
 )
 
 fun String.asReviewDateOrNull(): LocalDate? = runCatching { LocalDate.parse(this) }.getOrNull()
