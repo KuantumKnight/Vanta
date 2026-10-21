@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(13);
+select plan(17);
 
 insert into auth.users(id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
                        raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
@@ -22,6 +22,22 @@ values
   ('47000000-0000-4000-8000-000000000003', '27000000-0000-4000-8000-000000000004', '17000000-0000-4000-8000-000000000001', '2026-10-22 09:00:00+05:30', 'pending'),
   ('47000000-0000-4000-8000-000000000004', '27000000-0000-4000-8000-000000000003', '17000000-0000-4000-8000-000000000002', '2026-10-21 11:00:00+05:30', 'pending');
 
+select ok(
+  has_table_privilege('authenticated', 'public.daily_reviews', 'SELECT'),
+  'authenticated users have the intended daily-review read privilege'
+);
+select ok(
+  not has_table_privilege('anon', 'public.daily_reviews', 'SELECT'),
+  'anonymous users cannot read daily reviews through the Data API'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.daily_reviews', 'UPDATE'),
+  'authenticated users cannot update daily reviews outside the owner RPC'
+);
+select ok(
+  not has_table_privilege('authenticated', 'public.daily_reviews', 'DELETE'),
+  'authenticated users cannot delete daily reviews directly'
+);
 select ok(
   has_function_privilege('authenticated', 'public.system_save_daily_review(date,text)', 'EXECUTE'),
   'signed-in users can save their daily review'

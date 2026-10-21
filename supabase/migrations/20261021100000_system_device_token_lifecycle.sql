@@ -1,13 +1,4 @@
--- FCM tokens are globally unique. Only the authenticated device owner may
--- refresh an active registration; an inactive token can be reassigned after
--- sign-out. Clients cannot bypass this rule with a table upsert.
-revoke insert on public.device_tokens from public, anon, authenticated;
-
--- The prior repo migration declared this RPC as RETURNS void. Recreate it so
--- the result can identify the idempotently registered device row.
-drop function if exists public.system_register_device_token(text);
-
-create function public.system_register_device_token(p_token text)
+create or replace function public.system_register_device_token(p_token text)
 returns uuid
 language plpgsql
 security definer

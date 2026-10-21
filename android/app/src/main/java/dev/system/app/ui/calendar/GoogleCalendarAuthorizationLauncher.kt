@@ -24,7 +24,9 @@ fun rememberGoogleCalendarUserAuthorization(
     onError: (String) -> Unit,
 ): (chooseGoogleAccount: Boolean) -> Unit {
     val context = LocalContext.current
-    val authorization = remember(context) { GoogleCalendarAuthorization(context.applicationContext) }
+    val authorization = remember(context) {
+        lazy(LazyThreadSafetyMode.SYNCHRONIZED) { GoogleCalendarAuthorization(context.applicationContext) }
+    }
     val coroutineScope = rememberCoroutineScope()
     val latestOnAccessToken = rememberUpdatedState(onAccessToken)
     val latestOnCancelled = rememberUpdatedState(onCancelled)
@@ -34,7 +36,7 @@ fun rememberGoogleCalendarUserAuthorization(
         if (result.resultCode != android.app.Activity.RESULT_OK || result.data == null) {
             latestOnCancelled.value()
         } else {
-            runCatching { authorization.completeUserInteraction(result.data!!) }
+            runCatching { authorization.value.completeUserInteraction(result.data!!) }
                 .onSuccess { outcome ->
                     when (outcome) {
                         is CalendarAuthorizationResult.Authorized -> latestOnAccessToken.value(outcome.accessToken)
@@ -49,7 +51,7 @@ fun rememberGoogleCalendarUserAuthorization(
     return remember(authorization, coroutineScope, launcher) {
         { chooseGoogleAccount ->
             coroutineScope.launch {
-                runCatching { authorization.requestAccessToken(chooseGoogleAccount) }
+                runCatching { authorization.value.requestAccessToken(chooseGoogleAccount) }
                     .onSuccess { outcome ->
                         when (outcome) {
                             is CalendarAuthorizationResult.Authorized -> latestOnAccessToken.value(outcome.accessToken)

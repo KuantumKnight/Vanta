@@ -130,7 +130,9 @@ internal fun VantaRoot(
         }
     }
     val calendarRefreshMutex = remember(calendarRepository) { Mutex() }
-    val calendarAuthorization = remember(context) { GoogleCalendarAuthorization(context.applicationContext) }
+    val calendarAuthorization = remember(context) {
+        lazy(LazyThreadSafetyMode.SYNCHRONIZED) { GoogleCalendarAuthorization(context.applicationContext) }
+    }
     var selectedTab by remember { mutableStateOf(DashboardTab.Today) }
     var plannerWeekStart by remember(preferences.weekStartDay) {
         mutableStateOf(weekDateRange(today, preferences.weekStartDay).startInclusive)
@@ -144,12 +146,12 @@ internal fun VantaRoot(
     var aiPlanState by remember(accountContext.userId, today) { mutableStateOf<PlanMyDayUiState>(PlanMyDayUiState.Ready) }
     var replanPreview by remember(accountContext.userId, today) { mutableStateOf<PlanProposal?>(null) }
     var focusOverrun by remember(accountContext.userId, today) { mutableStateOf<ScheduleConflict?>(null) }
-    var goals by remember { mutableStateOf<List<GoalProgress>>(emptyList()) }
-    var goalsLoading by remember { mutableStateOf(false) }
-    var goalsError by remember { mutableStateOf<String?>(null) }
+    var goals by remember(accountContext.userId) { mutableStateOf<List<GoalProgress>>(emptyList()) }
+    var goalsLoading by remember(accountContext.userId) { mutableStateOf(false) }
+    var goalsError by remember(accountContext.userId) { mutableStateOf<String?>(null) }
     var syncBusy by remember { mutableStateOf(false) }
-    var activeFocusSession by remember { mutableStateOf<FocusSession?>(null) }
-    var showFocus by remember { mutableStateOf(false) }
+    var activeFocusSession by remember(accountContext.userId) { mutableStateOf<FocusSession?>(null) }
+    var showFocus by remember(accountContext.userId) { mutableStateOf(false) }
     var habits by remember(accountContext.userId) { mutableStateOf<List<HabitSummary>>(emptyList()) }
     var habitDetails by remember(accountContext.userId) { mutableStateOf<Map<String, HabitDetail>>(emptyMap()) }
     var selectedHabitId by remember(accountContext.userId) { mutableStateOf<String?>(null) }
@@ -310,7 +312,7 @@ internal fun VantaRoot(
             if (!calendarStatus.connected || !calendarStatus.isStale(System.currentTimeMillis())) return@withLock
             if (calendarRepository.value.isCacheFresh(ownerUserId)) return@withLock
             val result = try {
-                calendarAuthorization.requestAccessToken(chooseGoogleAccount = false)
+                calendarAuthorization.value.requestAccessToken(chooseGoogleAccount = false)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: Throwable) {
@@ -805,7 +807,7 @@ internal fun VantaRoot(
                                             val owner = accountContext.userId
                                             if (owner != null) scope.launch {
                                                 calendarRefreshing = true
-                                                val revoked = calendarRepository.value.disconnect(owner, calendarAuthorization)
+                                                val revoked = calendarRepository.value.disconnect(owner, calendarAuthorization.value)
                                                 calendarRefreshing = false
                                                 if (revoked) {
                                                     calendarSettingsError = null

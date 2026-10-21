@@ -13,7 +13,7 @@ alter table public.daily_reviews enable row level security;
 create policy "Owners read daily reviews" on public.daily_reviews
   for select to authenticated using (user_id = (select auth.uid()));
 
-revoke all on public.daily_reviews from anon, authenticated;
+revoke all on public.daily_reviews from public, anon, authenticated;
 grant select on public.daily_reviews to authenticated;
 
 create or replace function public.system_save_daily_review(p_review_date date, p_note text)

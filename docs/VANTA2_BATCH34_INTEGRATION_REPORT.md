@@ -30,8 +30,8 @@ Integration checks found one shared typed preferences API feeding planning hours
 
 ## Cross-Batch Fixes
 
-- Deferred Calendar repository construction until an authenticated owner is available. Signed-in Today and Week still load cached Calendar blocks.
-- Deferred AI `HttpClient` construction until the user requests Plan My Day, and close it on root disposal if initialized.
+- Deferred Calendar repository and Google authorization client construction until an authenticated owner/action is available. Signed-in Today and Week still load cached Calendar blocks; ordinary startup does not create the Google Identity client.
+- Deferred AI `HttpClient` construction until the user requests Plan My Day, and close it on root disposal if initialized. Account-specific goals and Focus UI state now reset when the owner changes; Dashboard task/goal filtering is memoized by source lists and query.
 - Repaired Room migration test builders to register both `MIGRATION_6_7` and `MIGRATION_7_8`; added coverage from the oldest version and Batch 2 version 6.
 - Reordered pending Supabase migration filenames to satisfy SQL dependencies. Delta sync follows scheduling semantics; reschedule follows delta sync. The renamed SQL bodies are byte-for-byte unchanged.
 - Formatted the 16 changed Batch 3/4 Deno source and documentation files checked below.
@@ -45,19 +45,19 @@ Room is version 8 with a registered, contiguous path from 1→2 through 7→8. S
 
 ## Supabase Migration Chain
 
-All 22 migrations were enumerated in timestamp order in [`VANTA2_MIGRATION_AUDIT.md`](VANTA2_MIGRATION_AUDIT.md). A read-only Supabase migration-history query confirms the project's applied history ends at `20261021100000_system_device_token_lifecycle`; the eight later migrations in this workspace are pending. Four applied migration sources missing from the workspace were restored from the recovered Git baseline. Two local edits to already-applied migration files are preserved in the worktree but excluded from the checkpoint: one comment-only change and one redundant revoke/drop edit. The latter's device-token revoke is already in the applied 09:00 migration. Audit found that delta sync reads scheduling columns created later by the scheduling migration, and reschedule uses the sync-state table/helper created by delta sync. The pending filenames now order them as:
+All 22 migrations were enumerated in timestamp order in [`VANTA2_MIGRATION_AUDIT.md`](VANTA2_MIGRATION_AUDIT.md). Read-only Supabase history confirms the project's applied history contains 14 migrations through `20261021100000_system_device_token_lifecycle`; the eight later migrations in this workspace are pending. Four applied migration sources missing from the workspace were restored from the recovered Git baseline. The comment-only edit to already-applied `20260926145917_secure_mcp_goal_link_ownership.sql` was removed because it was absent from the recorded SQL. The local `20261021100000_system_device_token_lifecycle.sql` change matches the three statements recorded for that applied migration and is retained as a source reconciliation; it is not a new migration and will not be reapplied. Read-only catalog inspection confirms the deployed token-registration function has an empty `search_path` and no `PUBLIC`/`anon` execute grant. The pending daily-review migration now explicitly revokes `PUBLIC` access and the pgTAP file asserts its direct table privileges. Audit found that delta sync reads scheduling columns created later by the scheduling migration, and reschedule uses the sync-state table/helper created by delta sync. The pending filenames now order them as:
 
 1. `20261021180000_vanta2_scheduling_semantics.sql`
 2. `20261021185000_vanta2_delta_sync.sql`
 3. `20261021185500_vanta2_reschedule_occurrence.sql`
 
-Static inspection found owner-scoped RLS/RPC checks, minimal grants, and controlled `search_path` values for reviewed definer functions. The local Supabase CLI is available through the repository (`npx --no-install supabase --version` → `2.117.0`). The Docker CLI exists, but the active `desktop-linux` context cannot connect to `npipe:////./pipe/dockerDesktopLinuxEngine`; local SQL/pgTAP acceptance did not run. Remote checks were read-only and limited to migration history plus the `pgrst.db_schemas` setting and `public.daily_reviews` catalog presence; no application data, migrations, or deployments were touched, so Supabase remains **NOT YET VERIFIED**.
+Static inspection found owner-scoped RLS/RPC checks, minimal grants, and controlled `search_path` values for reviewed definer functions. The local Supabase CLI is available through the repository (`npx --no-install supabase --version` → `2.117.0`). The Docker CLI exists, but the active `desktop-linux` context cannot connect to `npipe:////./pipe/dockerDesktopLinuxEngine`; local SQL/pgTAP acceptance did not run. Remote checks were read-only and limited to migration history, stored migration statements, function definitions/ACLs, the `pgrst.db_schemas` setting, and `public.daily_reviews` catalog presence; no application data, migrations, or deployments were touched, so Supabase remains **NOT YET VERIFIED**.
 
 Android reads `public.daily_reviews` through PostgREST. The read-only `pgrst.db_schemas` query returned null, so the target project's Data API exposure could not be established; confirm that `public` is exposed before deployment. Supabase announced a rollout beginning 2026-10-30 that changes the default exposure of new tables. [Supabase changelog](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically)
 
 ## Android Validation
 
-The Gradle wrapper starts and its daemon launches, but the Gradle process fails before project configuration or task discovery. `Selector.open()` fails independently in both installed Temurin JDK 17 runtimes with `java.io.IOException: Unable to establish loopback connection` caused by `java.net.SocketException: Invalid argument: connect`. A standalone Java probe reproduces it; a .NET TCP loopback probe succeeds. The app's Java 17 target is available. Proxy/Gradle options and `--no-daemon` did not change the failure. See [`GRADLE_BLOCKER.md`](GRADLE_BLOCKER.md) for the exact evidence and host-terminal command.
+The Gradle wrapper starts and its daemon launches, but the Gradle process fails before project configuration or task discovery. `Selector.open()` fails independently in both installed Temurin JDK 17 runtimes with `java.io.IOException: Unable to establish loopback connection` caused by `java.net.SocketException: Invalid argument: connect`. A standalone Java probe reproduces it; a .NET TCP loopback probe succeeds. The app's Java 17 target is available. Proxy/Gradle options and `--no-daemon` did not change the failure. See [`ANDROID_GRADLE_ENV_BLOCKER.md`](ANDROID_GRADLE_ENV_BLOCKER.md) for the exact evidence and host-terminal command.
 
 Therefore `testDebugUnitTest`, `lintDebug`, `assembleDebug`, `assembleRelease`, `assembleDebugAndroidTest`, and `connectedDebugAndroidTest` remain **BLOCKED**, not passed. `adb devices -l` found no device or emulator. Benchmark/profile tasks also remain unverified; no performance benchmark ran.
 
@@ -71,7 +71,7 @@ From the `supabase` project directory:
 
 ## Supabase Validation
 
-No local database was available: Docker reports that the `desktop-linux` named pipe is absent. Supabase CLI tests, migration application, and pgTAP acceptance were not run. Remote access was limited to a read-only migration-history listing and read-only checks of `pgrst.db_schemas` and whether `public.daily_reviews` exists; no application data was queried and no schema, data, or project settings were modified. The schema exposure value returned null and `daily_reviews` does not yet exist because its migration is pending. The source-level migration/security review is documented separately and does not establish runtime SQL correctness.
+No local database was available: Docker reports that the `desktop-linux` named pipe is absent. Supabase CLI tests, migration application, and pgTAP acceptance were not run. Remote access used read-only migration history, stored migration statements, function/catalog metadata, and checks of `pgrst.db_schemas` and whether `public.daily_reviews` exists; no application-table data was queried and no schema, data, or project settings were modified. The schema exposure value returned null and `daily_reviews` does not yet exist because its migration is pending. No development branch existed and none was created. The source-level migration/security review is documented separately and does not establish runtime SQL correctness.
 
 ## Security Review
 
@@ -97,7 +97,8 @@ Set `OPENAI_API_KEY` and `OPENAI_MODEL` as Supabase Edge Function secrets to ena
 
 - Android compile, lint, unit tests, assemblies, instrumentation, and benchmarks are blocked by JDK selector loopback failure in the Codex-launched Windows environment.
 - Room instrumentation tests and Supabase pgTAP tests were not executed.
-- The target Supabase Data API exposure could not be established because the read-only `pgrst.db_schemas` query returned null. The read-only migration history confirms only the pre-Batch-3/4 migrations are applied.
+- The target Supabase Data API exposure could not be established because the read-only `pgrst.db_schemas` query returned null. The read-only migration history confirms 14 applied migrations and eight Batch 3/4 migrations pending.
+- Other user-worktree edits were classified in [`VANTA2_WORKSPACE_RECONCILIATION.md`](VANTA2_WORKSPACE_RECONCILIATION.md); separate consent-site and historical Batch 1/2 work is preserved outside this release scope.
 - Production Google OAuth verification/client setup and OpenAI secrets remain operator tasks.
 - Runtime flows for sign-in/account switch, Calendar connect/disconnect, offline replay, widgets, and review rescheduling were code-reviewed but not exercised on an Android device.
 
@@ -117,6 +118,6 @@ Set `OPENAI_API_KEY` and `OPENAI_MODEL` as Supabase Edge Function secrets to ena
 | Deno | PASS | 34 shared tests pass; three Edge Function type checks pass; changed-file formatting passes. |
 | Room migrations | PARTIAL | Version 1–8 chain and migration tests reviewed/added; instrumentation not run. |
 | Supabase migrations | PARTIAL | Static order/security review passes after filename fixes; SQL/pgTAP and remote exposure unverified. |
-| Calendar security | PASS | Read-only scopes, memory-only tokens, owner-scoped separate cache, and local disconnect cleanup verified by inspection. |
-| AI validation | PASS | Authenticated owner reload and server/client proposal validation verified; missing-key behavior is graceful. |
+| Calendar configuration | PARTIAL | Read-only scopes, memory-only tokens, owner-scoped cache, and disconnect cleanup are source-reviewed; OAuth Console settings, consent verification, signing fingerprints, and signed-device flows are not verified. |
+| AI configuration | PARTIAL | Authenticated owner reload and server/client proposal validation are source-reviewed; missing-key behavior is graceful, but server secrets are not configured or verified. |
 | Batch 3 ↔ 4 integration | PASS BY CODE REVIEW | Shared preferences, priority, Focus history, occurrence-based habits, review reschedule fields, and optional Calendar seams align in source. |

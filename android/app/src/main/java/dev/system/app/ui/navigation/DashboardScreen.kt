@@ -210,15 +210,19 @@ internal fun DashboardScreen(
         onQuickCaptureRequestConsumed(request.token)
     }
     val normalizedQuery = search.trim()
-    val filteredTasks = pending.filter { row ->
-        normalizedQuery.isBlank() ||
-            row.title.contains(normalizedQuery, ignoreCase = true) ||
-            row.notes.orEmpty().contains(normalizedQuery, ignoreCase = true)
+    val filteredTasks = remember(pending, normalizedQuery) {
+        pending.filter { row ->
+            normalizedQuery.isBlank() ||
+                row.title.contains(normalizedQuery, ignoreCase = true) ||
+                row.notes.orEmpty().contains(normalizedQuery, ignoreCase = true)
+        }
     }
-    val filteredGoals = goals.filter {
-        normalizedQuery.isBlank() ||
-            it.title.contains(normalizedQuery, ignoreCase = true) ||
-            it.description.orEmpty().contains(normalizedQuery, ignoreCase = true)
+    val filteredGoals = remember(goals, normalizedQuery) {
+        goals.filter {
+            normalizedQuery.isBlank() ||
+                it.title.contains(normalizedQuery, ignoreCase = true) ||
+                it.description.orEmpty().contains(normalizedQuery, ignoreCase = true)
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
