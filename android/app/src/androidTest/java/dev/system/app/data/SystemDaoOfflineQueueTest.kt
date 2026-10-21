@@ -189,6 +189,7 @@ class SystemDaoOfflineQueueTest {
         }
         val previousCurrent = occurrence("previous-current").copy(
             scheduledFor = today.minusDays(1).atTime(18, 0).atZone(zone).toInstant().toString(),
+            allDay = false,
             durationMinutes = 1_440,
         )
         val completedToday = occurrence("completed-today").copy(

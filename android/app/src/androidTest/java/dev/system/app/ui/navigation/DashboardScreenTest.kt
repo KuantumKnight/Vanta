@@ -3,6 +3,7 @@ package dev.system.app.ui.navigation
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -230,6 +231,7 @@ class DashboardScreenTest {
         composeRule.onNodeWithText("SOFT · Type").performClick()
         composeRule.onNodeWithText("HARD").performClick()
         composeRule.onNodeWithContentDescription("All day").performClick()
+        composeRule.onNodeWithText("Save task").assertIsEnabled()
         composeRule.onNodeWithText("Save task").performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) { created.get() != null }
 

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -50,9 +51,18 @@ class SignInScreenTest {
         composeRule.onNodeWithText("Continue with email").assertIsDisplayed()
         composeRule.onNodeWithText("Email me a sign-in link").assertIsNotEnabled()
 
-        composeRule.onNode(hasSetTextAction()).performTextInput("qa@example.com")
+        val application = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as SystemApplication
+        val emailField = composeRule.onNode(hasSetTextAction())
+        emailField.performTextInput("not-an-email")
+        composeRule.onNodeWithText("Email me a sign-in link").assertIsNotEnabled()
 
-        composeRule.onNodeWithText("Email me a sign-in link").assertIsEnabled()
+        emailField.performTextReplacement("qa@example.com")
+        if (application.repository.isConfigured) {
+            composeRule.onNodeWithText("Email me a sign-in link").assertIsEnabled()
+        } else {
+            composeRule.onNodeWithText("Connect Supabase to enable sign-in.").assertIsDisplayed()
+            composeRule.onNodeWithText("Email me a sign-in link").assertIsNotEnabled()
+        }
     }
 
     @Test

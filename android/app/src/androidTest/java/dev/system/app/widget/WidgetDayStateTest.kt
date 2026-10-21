@@ -55,7 +55,7 @@ class WidgetDayStateTest {
     fun overlappingTasksUseStableStartOrderAndKeepUpcomingOverlapVisible() {
         val state = buildWidgetDayState(
             rows = listOf(
-                occurrence("later-start", "Gym", "10:30", duration = 60),
+                occurrence("later-start", "Gym", "11:00", duration = 60),
                 occurrence("earlier-start", "Research", "10:00", duration = 90),
             ),
             today = day,
@@ -65,7 +65,7 @@ class WidgetDayStateTest {
 
         assertEquals("earlier-start", state.currentOccurrence?.id)
         assertEquals("later-start", state.nextOccurrence?.id)
-        assertEquals(local("11:30").toEpochMilli(), state.nextBoundaryEpochMillis)
+        assertEquals(local("11:00").toEpochMilli(), state.nextBoundaryEpochMillis)
     }
 
     @Test
