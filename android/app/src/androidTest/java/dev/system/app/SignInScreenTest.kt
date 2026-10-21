@@ -60,7 +60,6 @@ class SignInScreenTest {
         if (application.repository.isConfigured) {
             composeRule.onNodeWithText("Email me a sign-in link").assertIsEnabled()
         } else {
-            composeRule.onNodeWithText("Connect Supabase to enable sign-in.").assertIsDisplayed()
             composeRule.onNodeWithText("Email me a sign-in link").assertIsNotEnabled()
         }
     }

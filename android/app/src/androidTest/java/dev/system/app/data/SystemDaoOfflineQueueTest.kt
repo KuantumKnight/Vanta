@@ -184,6 +184,7 @@ class SystemDaoOfflineQueueTest {
         val todayRows = (0 until 140).map { index ->
             occurrence("today-$index").copy(
                 scheduledFor = today.atTime(16, 0).atZone(zone).toInstant().plusSeconds(index.toLong()).toString(),
+                allDay = false,
                 durationMinutes = 30,
             )
         }
@@ -196,6 +197,7 @@ class SystemDaoOfflineQueueTest {
             scheduledFor = today.atTime(15, 0).atZone(zone).toInstant().toString(),
             status = "completed",
             completedAt = today.atTime(15, 10).atZone(zone).toInstant().toString(),
+            allDay = false,
             durationMinutes = 15,
         )
         val nextDay = occurrence("next-day").copy(
