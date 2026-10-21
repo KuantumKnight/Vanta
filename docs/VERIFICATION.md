@@ -54,7 +54,7 @@ All checks below ran on 21 October 2026 in the Vanta checkout.
 | `.\gradlew.bat --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` from `android` | Passed. `testDebugUnitTest` had no unit-test sources; lint, APK assembly, and Android test assembly passed. The documented Windows loopback-temp workaround was needed. |
 | `.\gradlew.bat --no-daemon connectedDebugAndroidTest` from `android` | Passed on `SYSTEM_CI_QA_FINAL` API 36: 19 tests, 0 failures, 0 errors. Includes queue persistence/migration and retry-state checks, cache identity, replay classification, sync follow-up gating, sign-in, response projection, and widget-feed tests. |
 
-GitHub Actions run 46 passed on commit `6bc99dffb431770c7e2ec66cc4fcc1063d3939bb`: Consent site, Supabase Edge Functions, and Android debug APK including emulator instrumentation. The rollout record and acceptance assertion fixes will be checked by CI after push.
+GitHub Actions [run 47](https://github.com/KuantumKnight/Vanta/actions/runs/39544908978) passed on commit `8bf3cb802f7ade6b432095e59ca3de7b206b6a40`: Consent site, Supabase Edge Functions, and Android debug APK including emulator instrumentation. All three jobs passed.
 
 ## Database integration acceptance
 
