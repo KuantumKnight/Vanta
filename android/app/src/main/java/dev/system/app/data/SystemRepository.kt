@@ -11,7 +11,6 @@ import dev.system.app.settings.UserPreferencesRepository
 import dev.system.app.planner.PlanProposal
 import dev.system.app.planner.SchedulePriority
 import dev.system.app.planner.ScheduleType
-import io.github.jan.supabase.auth.currentSessionOrNull
 import dev.system.app.sync.SyncWorker
 import dev.system.app.sync.SyncPassCoordinator
 import dev.system.app.widget.SystemWidget
