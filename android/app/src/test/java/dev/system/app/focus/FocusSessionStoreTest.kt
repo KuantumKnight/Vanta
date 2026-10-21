@@ -32,7 +32,10 @@ class FocusSessionStoreTest {
         val ended = store.endEarly("user-1", finishedAtEpochMillis = 31_000L)
         assertEquals(FocusSessionStatus.ENDED_EARLY, ended.status)
         assertNull(store.activeSession("user-1"))
-        assertEquals(ended, store.start("user-1", occurrence("occ-2"), plannedDurationSeconds = 300L))
+        val replacement = store.start("user-1", occurrence("occ-2"), plannedDurationSeconds = 300L)
+        assertEquals(FocusSessionStatus.ACTIVE, replacement.status)
+        assertEquals("occ-2", replacement.occurrenceId)
+        assertEquals(replacement, store.activeSession("user-1"))
     }
 
     @Test
