@@ -28,8 +28,10 @@ class ReplayErrorClassifierTest {
         assertEquals(ReplayOutcome.RETRYABLE, classifyReplayError(HttpError(503)).outcome)
     }
 
-    private class DatabaseError(val code: String, val detail: String? = null) : RuntimeException("opaque backend error")
-    private class HttpError(val response: FakeResponse) : RuntimeException("opaque HTTP error")
-    private class FakeResponse(val status: FakeStatus)
-    private class FakeStatus(val value: Int)
+    class DatabaseError(val code: String, val detail: String? = null) : RuntimeException("opaque backend error")
+    class HttpError(status: Int) : RuntimeException("opaque HTTP error") {
+        val response = FakeResponse(FakeStatus(status))
+    }
+    class FakeResponse(val status: FakeStatus)
+    class FakeStatus(val value: Int)
 }

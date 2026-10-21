@@ -1,6 +1,7 @@
 package dev.system.app.planner.core
 
 import dev.system.app.planner.FlexibleTask
+import dev.system.app.planner.FreeInterval
 import dev.system.app.planner.ScheduleBlock
 import dev.system.app.planner.SchedulePriority
 import dev.system.app.planner.ScheduleSource
