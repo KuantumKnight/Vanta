@@ -54,7 +54,6 @@ jobs:
           dotnet: true
           haskell: true
           large-packages: true
-          docker-images: true
           preinstalled-runtimes: false
           swap-storage: false
       - uses: actions/setup-java@v6

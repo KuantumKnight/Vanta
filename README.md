@@ -28,4 +28,4 @@ See [docs/V1_COMPLETION_PLAN.md](docs/V1_COMPLETION_PLAN.md) for current progres
 - Recurrences use RFC 5545 rules and exclusions, with a minimum interval of 15 minutes.
 - XP and levels are deferred until the core workflow is reliable.
 
-Docker is optional and is only needed for a local Supabase stack. Hosted Supabase and the Android and consent-site builds work without Docker.
+The repository uses the hosted Supabase project for controlled database acceptance. GitHub Actions runs consent, Edge Function, and Android checks without a local database stack.

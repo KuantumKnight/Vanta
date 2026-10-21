@@ -7,11 +7,11 @@
 - `web/consent` is the HTTPS OAuth consent and passwordless email sign-in site.
 - Android uses Kotlin, Compose, Room, Glance, WorkManager, and Firebase Cloud Messaging.
 
-Docker is optional. It is only needed to run a local Supabase stack; app development and a hosted Supabase project do not require it.
+This repository uses the existing hosted Supabase project for database verification. CI does not start a local database stack.
 
 ## Supabase project
 
-Use the existing hosted project or create one in the Supabase dashboard. Apply the migrations in `supabase/migrations` in filename order. When using the CLI, authenticate and link the project first:
+Use the existing hosted project or create one in the Supabase dashboard. Do not apply pending migrations until the non-database GitHub Actions checks pass, the migration order is reviewed, and the hosted rollback-safe acceptance is ready to run. When using the CLI, authenticate and link the project first:
 
 ```powershell
 npx supabase login
@@ -19,7 +19,7 @@ npx supabase link --project-ref <project-ref>
 npx supabase db push
 ```
 
-The original hosted migrations and four Edge Functions are deployed. The previously applied refresh migration `20261017045929_system_push_refresh_best_effort.sql` and device-token lifecycle migration `20261021100000_system_device_token_lifecycle.sql` are tracked in this repository and match the hosted migration history. The four audit migrations dated `20261021090000` through `20261021090200` remain a separate rollout; apply them in order and run the acceptance checks in [VERIFICATION.md](VERIFICATION.md) before relying on those changes. Do not run local `supabase start` for this hosted setup.
+The hosted project has the original migrations plus `20261017045929_system_push_refresh_best_effort.sql` and `20261021100000_system_device_token_lifecycle.sql` applied. Four audit migrations, `20261021090000` through `20261021090200`, remain pending. The first two were modified before deployment; in particular, `20261021090030` now matches the safe token ownership behavior of the already-applied `20261021100000`. The complete applied/pending list and read-only production checks are recorded in [VERIFICATION.md](VERIFICATION.md). Apply pending migrations only through the reviewed hosted rollout sequence.
 
 Set the server-only Edge Function secrets in the Supabase dashboard or with the CLI. Supabase supplies `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to functions automatically.
 
@@ -30,7 +30,7 @@ npx supabase secrets set FCM_PROJECT_ID=<firebase-project-id> FCM_CLIENT_EMAIL=<
 
 Use a fresh random value for `INTERNAL_FUNCTION_SECRET`; the same value is stored in Supabase Vault by the server-jobs migration so database triggers and scheduled jobs can call the Edge Functions. Never put this value, a service-role key, or an FCM private key in Android, Vercel, or source control.
 
-The migrations install statement-level, best-effort database triggers for refresh signals and schedule recurrence expansion and reminders. A refresh failure does not roll back task writes, and bulk occurrence inserts send one refresh signal per owner and statement. The historical anonymous consent-storage probe bucket is made private by a follow-up migration. Check the Supabase cron run history after setup. `sync-push`, `expand-schedules`, and `send-reminders` use the internal secret for calls from Postgres; the MCP function uses Supabase OAuth bearer tokens and runs with the signed-in user's identity under RLS.
+The applied `20261017045929` migration makes refresh signaling best effort, so a missing Vault secret does not roll back task writes. The pending `20261021090200` migration changes refresh triggers to statement-level batching; until rollout, bulk writes may still signal once per row. The pending `20261021090100` migration makes the historical consent probe bucket private. Check the Supabase cron run history after setup. `sync-push`, `expand-schedules`, and `send-reminders` use the internal secret for calls from Postgres; the MCP function uses Supabase OAuth bearer tokens and runs with the signed-in user's identity under RLS.
 
 ## OAuth consent site on Vercel
 
@@ -108,7 +108,7 @@ To enable push refresh, add the Firebase Android app for the application ID in `
 
 For the current SYSTEM setup, Firebase project `gdg-web-dev` has Android app `dev.system.app` registered. Its `google-services.json` is downloaded locally and ignored by Git. GitHub Actions decodes the same file from repository secret `SYSTEM_GOOGLE_SERVICES_JSON_B64` so the CI APK initializes Firebase; never commit the config file or a service-account key. A dedicated sender account, `system-fcm-sender@gdg-web-dev.iam.gserviceaccount.com`, has the project custom role `systemFcmSender`, limited to `cloudmessaging.messages.create`. The Firebase Cloud Messaging API is enabled. `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, and `FCM_PRIVATE_KEY` are configured as Supabase Edge Function secrets. Token registration uses an authenticated RPC. A token can be reused by its current owner or reassigned after it has been disabled; an active token owned by another account is rejected. Finish by signing in on the Android device, confirming its token appears under the owner in `device_tokens`, and testing refresh delivery with the app closed.
 
-On pushes to `main`, GitHub Actions uses the repository secrets `SYSTEM_GOOGLE_SERVICES_JSON_B64`, `SYSTEM_SUPABASE_URL`, and `SYSTEM_SUPABASE_PUBLISHABLE_KEY`. Pull-request builds use generated non-secret Firebase and Supabase placeholders. CI runs consent lint/build, Deno recurrence tests and Edge Function checks, plus Android build, lint, and API 36 instrumentation tests; credentials are not stored in the repository.
+On pushes to `main`, GitHub Actions uses the repository secrets `SYSTEM_GOOGLE_SERVICES_JSON_B64`, `SYSTEM_SUPABASE_URL`, and `SYSTEM_SUPABASE_PUBLISHABLE_KEY`. Pull-request builds use generated non-secret Firebase and Supabase placeholders. CI runs consent lint/build, Deno recurrence tests and Edge Function checks, plus Android build, lint, and API 36 instrumentation tests; credentials are not stored in the repository. Database acceptance is a controlled hosted release gate documented in [VERIFICATION.md](VERIFICATION.md).
 
 ## ChatGPT connection
 
@@ -136,4 +136,4 @@ deno test --config supabase/deno.json supabase/functions/_shared/recurrence_test
 deno check --config supabase/deno.json supabase/functions/mcp/index.ts supabase/functions/expand-schedules/index.ts supabase/functions/sync-push/index.ts supabase/functions/send-reminders/index.ts
 ```
 
-No Docker daemon is needed for these checks. See `docs/VERIFICATION.md` for backend and device acceptance steps.
+See `docs/VERIFICATION.md` for the read-only hosted checks, hosted rollback-safe acceptance procedure, and owner-device steps. Run the acceptance SQL only after the migration precheck and approved rollout conditions are satisfied.
