@@ -68,28 +68,16 @@ async function materializeSchedule(supabase: any, schedule: ScheduleForExpansion
   const from = new Date(now.getTime() - 86400000);
   const to = new Date(now.getTime() + 120 * 86400000);
   const generated = getOccurrences(schedule, from, to);
-  const reminderTime = schedule.reminder_time?.slice(0, 5);
-  const rows = generated.map((scheduled) => {
-    const reminderAt = reminderTime
-      ? localDateTimeToUtc(dateFromInstant(scheduled.toISOString()), reminderTime)
-      : null;
-    return {
-      task_id: schedule.task_id,
-      schedule_id: schedule.id,
-      user_id: schedule.user_id,
-      scheduled_for: scheduled.toISOString(),
-      all_day: false,
-      reminder_at: reminderAt && new Date(reminderAt) > now ? reminderAt : null,
-    };
-  });
-  for (let offset = 0; offset < rows.length; offset += 500) {
-    const { error } = await supabase.from("task_occurrences").upsert(
-      rows.slice(offset, offset + 500),
-      { onConflict: "schedule_id,scheduled_for", ignoreDuplicates: true },
-    );
+  let inserted = 0;
+  for (let offset = 0; offset < generated.length; offset += 500) {
+    const { data, error } = await supabase.rpc("system_materialize_schedule_occurrences", {
+      p_schedule_id: schedule.id,
+      p_scheduled_for: generated.slice(offset, offset + 500).map((scheduled) => scheduled.toISOString()),
+    });
     throwIfError(error);
+    inserted += Number(data ?? 0);
   }
-  return rows.length;
+  return inserted;
 }
 
 function registerTools(server: McpServer, supabase: any) {
