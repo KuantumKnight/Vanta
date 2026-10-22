@@ -45,6 +45,9 @@ jobs:
 
   android:
     name: Android release gate
+    env:
+      VANTA_E2E_SUPABASE_URL: ${{ secrets.VANTA_E2E_SUPABASE_URL }}
+      VANTA_E2E_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VANTA_E2E_SUPABASE_PUBLISHABLE_KEY }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

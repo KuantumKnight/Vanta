@@ -22,8 +22,10 @@ val localProperties = Properties().apply {
 }
 // Keep the managed CI emulator opt-in so ordinary developer builds do not provision it.
 val ciManagedDeviceEnabled = providers.gradleProperty("ciManagedDevice").orNull == "true"
-val supabaseUrl = localProperties.getProperty("SUPABASE_URL", "https://example.supabase.co")
-val supabasePublishableKey = localProperties.getProperty("SUPABASE_PUBLISHABLE_KEY", "")
+val supabaseUrl = System.getenv("VANTA_E2E_SUPABASE_URL")
+    ?: localProperties.getProperty("SUPABASE_URL", "https://example.supabase.co")
+val supabasePublishableKey = System.getenv("VANTA_E2E_SUPABASE_PUBLISHABLE_KEY")
+    ?: localProperties.getProperty("SUPABASE_PUBLISHABLE_KEY", "")
 
 android {
     namespace = "dev.system.app"
