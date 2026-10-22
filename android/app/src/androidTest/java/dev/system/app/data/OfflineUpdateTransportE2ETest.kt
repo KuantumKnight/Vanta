@@ -288,8 +288,9 @@ class OfflineUpdateOfflineUiTest {
             dao.pendingMutations(userId).single { it.operationType == "update_task" }
         }
         assertTrue(pending.retryCount >= 1)
-        val nextAttemptAt = requireNotNull(pending.nextAttemptAt)
-        assertTrue(nextAttemptAt >= pending.lastAttemptAt + 30_000L)
+        val lastAttemptAt = requireNotNull(pending.lastAttemptAt)
+        val nextAttemptAt = pending.nextAttemptAt
+        assertTrue(nextAttemptAt >= lastAttemptAt + 30_000L)
         assertTrue(nextAttemptAt > beforeAttempt)
         OfflineE2ESupport.saveState(
             state.put("updateOperationId", pending.operationId)
