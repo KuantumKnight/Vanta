@@ -348,6 +348,13 @@ class OfflineUpdateReplayAndDeltaTest {
         assertEquals(editedTitle, dao.occurrence(userId, occurrenceId)?.title)
         assertTrue(pendingBefore.nextAttemptAt > System.currentTimeMillis())
 
+        val initialCheckpoint = dao.syncCheckpoint(userId)?.revision ?: 0L
+        val serverBeforeReplay = client.from("tasks")
+            .select(columns = Columns.raw("id,title,notes")) {
+                filter { eq("id", taskId) }
+            }
+            .decodeSingle<RemoteTaskRead>()
+        assertEquals(state.getString("originalTitle"), serverBeforeReplay.title)
         val remotePriority = "HIGH"
         val deltaUpdate = rpcUpdate(
             taskId = taskId,
@@ -359,10 +366,11 @@ class OfflineUpdateReplayAndDeltaTest {
         val afterDelta = dao.occurrence(userId, occurrenceId)
         val pendingAfterDelta = dao.pendingMutations(userId).singleOrNull { it.operationType == "update_task" }
         assertEquals(editedTitle, afterDelta?.title)
+        assertEquals(remotePriority, afterDelta?.priority)
         assertNotNull(pendingAfterDelta)
         assertEquals(pendingBefore.operationId, pendingAfterDelta?.operationId)
         val deltaCheckpoint = dao.syncCheckpoint(userId)?.revision
-        assertTrue(deltaCheckpoint != null && deltaCheckpoint > 0)
+        assertTrue(deltaCheckpoint != null && deltaCheckpoint > initialCheckpoint)
 
         OfflineE2ESupport.saveState(state.put("deltaRaceProtected", true)
             .put("deltaPriority", remotePriority)
