@@ -1,0 +1,123 @@
+name: Android performance evidence
+
+on:
+  push:
+    branches: [vanta2-perf-closure]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-performance:
+    name: Android Macrobenchmark and Baseline Profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: >-
+            platform-tools
+            emulator
+            platforms;android-37.0
+            build-tools;37.0.0
+            system-images;android-36;default;x86_64
+
+      - name: Configure non-production Firebase placeholder
+        working-directory: android
+        run: |
+          cat > app/google-services.json <<'JSON'
+          {
+            "project_info": {
+              "project_number": "123456789012",
+              "project_id": "vanta-ci-placeholder",
+              "storage_bucket": "vanta-ci-placeholder.appspot.com"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:123456789012:android:abcdef0123456789abcd",
+                "android_client_info": { "package_name": "dev.system.app" }
+              },
+              "oauth_client": [],
+              "api_key": [{ "current_key": "ci-placeholder-not-a-secret" }],
+              "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+            }]
+          }
+          JSON
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Create and boot API 36 emulator
+        run: |
+          echo no | avdmanager create avd --force --name vanta-perf-api36 --package "system-images;android-36;default;x86_64" --device pixel_2
+          emulator -avd vanta-perf-api36 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-save > "$RUNNER_TEMP/vanta-perf-emulator.log" 2>&1 &
+          adb wait-for-device
+          for attempt in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then break; fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          mkdir -p "$RUNNER_TEMP/vanta-perf-metadata"
+          {
+            adb shell getprop ro.build.fingerprint
+            adb shell getprop ro.build.version.release
+            adb shell getprop ro.build.version.sdk
+            adb shell getprop ro.product.model
+            adb shell getprop ro.product.cpu.abi
+            adb shell settings get system font_scale
+          } > "$RUNNER_TEMP/vanta-perf-metadata/device.txt"
+
+      - name: List benchmark and profile tasks
+        working-directory: android
+        run: bash ./gradlew --no-daemon :app:tasks --all :benchmark:tasks --all | tee "$RUNNER_TEMP/vanta-perf-metadata/gradle-tasks.txt"
+
+      - name: Generate release-like Baseline Profile
+        working-directory: android
+        run: bash ./gradlew --no-daemon :app:generateBenchmarkBaselineProfile
+
+      - name: Assemble release-like profileable target
+        working-directory: android
+        run: |
+          bash ./gradlew --no-daemon :app:assembleBenchmark
+          apk=app/build/outputs/apk/benchmark/app-benchmark.apk
+          test -f "$apk"
+          unzip -Z1 "$apk" | tee "$RUNNER_TEMP/vanta-perf-metadata/benchmark-apk-entries.txt"
+          unzip -Z1 "$apk" | grep -E '^assets/dexopt/baseline\.prof(m)?$'
+
+      - name: Run startup, screen-frame, and required-profile Macrobenchmarks
+        working-directory: android
+        run: bash ./gradlew --no-daemon :benchmark:connectedCheck
+
+      - name: Upload benchmark and profile evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vanta-batch5-performance-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/vanta-perf-metadata/**
+            ${{ runner.temp }}/vanta-perf-emulator.log
+            android/app/src/benchmark/generated/baselineProfiles/**
+            android/app/src/main/generated/baselineProfiles/**
+            android/app/build/outputs/apk/benchmark/**
+            android/benchmark/build/reports/androidTests/**
+            android/benchmark/build/outputs/androidTest-results/**
+            android/benchmark/build/outputs/connected_android_test_additional_output/**
+            android/benchmark/build/outputs/connected_android_test_additional_output/**
+            android/benchmark/build/test-results/**
+          if-no-files-found: warn
+          retention-days: 14

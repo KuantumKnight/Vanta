@@ -1,6 +1,7 @@
 package dev.system.app.benchmark
 
 import androidx.benchmark.macro.BaselineProfileRule
+import androidx.benchmark.macro.BaselineProfileMode
 import androidx.benchmark.macro.CompilationMode
 import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.MacrobenchmarkScope
@@ -31,6 +32,28 @@ class VantaBenchmarkJourneys {
         packageName = TARGET_PACKAGE,
         metrics = listOf(StartupTimingMetric()),
         compilationMode = CompilationMode.DEFAULT,
+        startupMode = StartupMode.COLD,
+        iterations = 5,
+    ) {
+        startActivityAndWait()
+    }
+
+    @Test
+    fun coldStartupWithoutBaselineProfile() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(StartupTimingMetric()),
+        compilationMode = CompilationMode.None(),
+        startupMode = StartupMode.COLD,
+        iterations = 5,
+    ) {
+        startActivityAndWait()
+    }
+
+    @Test
+    fun coldStartupRequiringBaselineProfile() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(StartupTimingMetric()),
+        compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
         startupMode = StartupMode.COLD,
         iterations = 5,
     ) {
