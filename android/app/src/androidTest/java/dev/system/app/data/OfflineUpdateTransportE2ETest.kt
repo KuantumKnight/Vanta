@@ -162,6 +162,13 @@ private data class RemoteOccurrenceRead(val id: String, val priority: String)
 @Serializable
 private data class RemoteOccurrenceId(val id: String)
 
+@Serializable
+private data class RemoteSyncRevisionRead(val revision: Long)
+
+private suspend fun currentSyncRevision(client: SupabaseClient): Long =
+    client.postgrest.rpc("system_current_sync_revision")
+        .decodeAs<RemoteSyncRevisionRead>().revision
+
 private fun rpcUpdate(
     taskId: String,
     title: String = "",
@@ -347,7 +354,30 @@ class OfflineUpdateReplayAndDeltaTest {
 
         val pendingBefore = dao.pendingMutations(userId).single { it.operationType == "update_task" }
         assertEquals(editedTitle, dao.occurrence(userId, occurrenceId)?.title)
-        assertTrue(pendingBefore.nextAttemptAt > System.currentTimeMillis())
+        assertEquals(editedTitle, pendingBefore.title)
+        assertTrue(pendingBefore.updateTitle)
+        assertFalse(pendingBefore.updateNotes)
+        assertFalse(pendingBefore.updateSchedule)
+        assertFalse(pendingBefore.updateDuration)
+        assertFalse(pendingBefore.updateScheduleType)
+        assertFalse(pendingBefore.updatePriority)
+        assertFalse(pendingBefore.updateDeadlineAt)
+        assertFalse(pendingBefore.updateEarliestStart)
+        assertFalse(pendingBefore.updateLatestEnd)
+        assertFalse(pendingBefore.updatePreferredStart)
+
+        // Hold the queued edit long enough to deterministically test a remote delta race.
+        val retryDeadline = maxOf(pendingBefore.nextAttemptAt, System.currentTimeMillis() + 60_000L)
+        dao.markMutationRetry(
+            userId = userId,
+            operationId = pendingBefore.operationId,
+            retryCount = pendingBefore.retryCount,
+            attemptAt = requireNotNull(pendingBefore.lastAttemptAt),
+            nextAttemptAt = retryDeadline,
+            errorCode = pendingBefore.lastErrorCode,
+            message = pendingBefore.lastError,
+        )
+        assertTrue(dao.pendingMutation(userId, pendingBefore.operationId)!!.nextAttemptAt > System.currentTimeMillis())
 
         val initialCheckpoint = dao.syncCheckpoint(userId)?.revision ?: 0L
         val serverBeforeReplay = client.from("tasks")
@@ -377,6 +407,31 @@ class OfflineUpdateReplayAndDeltaTest {
             .put("deltaPriority", remotePriority)
             .put("deltaRevision", deltaCheckpoint))
 
+        val revisionBeforeDiscardedAck = currentSyncRevision(client)
+        val exactQueuedRequest = rpcUpdate(
+            taskId = taskId,
+            title = requireNotNull(pendingBefore.title),
+            updateTitle = pendingBefore.updateTitle,
+            operationId = pendingBefore.operationId,
+        )
+        // The same authenticated RPC and payload commit on the server; discard the decoded result
+        // at the test layer and leave Room's pending mutation untouched. This is not a wire drop.
+        client.postgrest.rpc("mcp_update_task_with_scheduling", exactQueuedRequest)
+        val revisionAfterDiscardedAck = currentSyncRevision(client)
+        assertTrue(revisionAfterDiscardedAck > revisionBeforeDiscardedAck)
+        val serverAfterDiscardedAck = client.from("tasks")
+            .select(columns = Columns.raw("id,title")) {
+                filter { eq("id", taskId) }
+            }
+            .decodeSingle<RemoteTaskRead>()
+        assertEquals(editedTitle, serverAfterDiscardedAck.title)
+        assertEquals(editedTitle, dao.occurrence(userId, occurrenceId)?.title)
+        assertEquals(pendingBefore.operationId,
+            dao.pendingMutations(userId).single { it.operationType == "update_task" }.operationId)
+        OfflineE2ESupport.saveState(state.put("testLayerDiscardedAck", true)
+            .put("ambiguousResponseActuallyLost", false)
+            .put("serverRevisionAfterDiscardedAck", revisionAfterDiscardedAck))
+
         withTimeout(120_000) {
             while (true) {
                 val current = dao.pendingMutations(userId).singleOrNull { it.operationType == "update_task" }
@@ -404,10 +459,13 @@ class OfflineUpdateReplayAndDeltaTest {
         assertEquals(editedTitle, serverTask.title)
         assertEquals(remotePriority, serverOccurrence.priority)
         assertTrue(dao.pendingMutations(userId).none { it.operationType == "update_task" })
+        val revisionAfterRepositoryReplay = currentSyncRevision(client)
+        assertEquals(revisionAfterDiscardedAck, revisionAfterRepositoryReplay)
         OfflineE2ESupport.saveState(state.put("converged", true)
             .put("finalServerTitle", serverTask.title)
             .put("finalRoomTitle", local?.title)
-            .put("finalPriority", serverOccurrence.priority))
+            .put("finalPriority", serverOccurrence.priority)
+            .put("sameOperationReplayDidNotWriteAgain", true))
     }
 }
 
@@ -494,13 +552,32 @@ class OfflineUpdateSecurityAndIdempotencyTest {
             email = accountA.email
             password = accountA.password
         }
+        val convergedTitle = state.getString("editedTitle")
+        repoClient.postgrest.rpc(
+            "mcp_update_task_with_scheduling",
+            rpcUpdate(
+                taskId = taskId,
+                title = convergedTitle,
+                updateTitle = true,
+                operationId = UUID.randomUUID().toString(),
+            ),
+        )
         restoredA.syncNow()
+        val restoredServerTask = repoClient.from("tasks")
+            .select(columns = Columns.raw("id,title")) {
+                filter { eq("id", taskId) }
+            }
+            .decodeSingle<RemoteTaskRead>()
+        val restoredLocalOccurrence = app.database.systemDao().occurrence(userA.userId, occurrenceId)
+        assertEquals(convergedTitle, restoredServerTask.title)
+        assertEquals(convergedTitle, restoredLocalOccurrence?.title)
         OfflineE2ESupport.saveState(
             state.put("crossUserDenied", true)
                 .put("allowlistRejected", true)
                 .put("sameOperationReplayEqual", first == retry)
                 .put("ambiguousResponseActuallyLost", false)
                 .put("idempotentTaskTitle", replayTaskTitle)
+                .put("convergedTitleRestoredBeforePhase6", true)
         )
     }
 }
