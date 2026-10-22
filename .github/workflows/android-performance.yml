@@ -140,7 +140,7 @@ jobs:
       - name: Run startup, screen-frame, and required-profile Macrobenchmarks
         timeout-minutes: 35
         working-directory: android
-        run: timeout 34m bash ./gradlew --no-daemon :benchmark:connectedCheck
+        run: timeout 34m bash ./gradlew --no-daemon -PallowEmulatorBenchmarks=true :benchmark:connectedCheck
 
       - name: Upload benchmark and profile evidence
         if: always()

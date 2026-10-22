@@ -3,6 +3,8 @@ plugins {
     id("androidx.baselineprofile")
 }
 
+val allowEmulatorBenchmarks = providers.gradleProperty("allowEmulatorBenchmarks").orNull == "true"
+
 android {
     namespace = "dev.system.app.benchmark"
     compileSdk = 37
@@ -11,6 +13,9 @@ android {
         minSdk = 28
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        if (allowEmulatorBenchmarks) {
+            testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] = "EMULATOR"
+        }
     }
 
     targetProjectPath = ":app"
