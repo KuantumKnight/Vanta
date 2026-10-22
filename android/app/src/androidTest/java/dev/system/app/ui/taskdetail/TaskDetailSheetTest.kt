@@ -118,7 +118,7 @@ class TaskDetailSheetTest {
         composeRule.onNodeWithText("Cancel edit").performScrollTo().performClick()
         composeRule.onNodeWithText("Discard changes?").assertIsDisplayed()
         composeRule.onNodeWithText("Keep editing").performClick()
-        composeRule.onNodeWithContentDescription("Task title").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Task title").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Cancel edit").performScrollTo().performClick()
         composeRule.onNodeWithText("Discard").performClick()
         composeRule.onNodeWithText("Edit").assertIsDisplayed()
