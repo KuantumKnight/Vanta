@@ -22,7 +22,7 @@ private const val UI_WAIT_MS = 1_500L
 
 @LargeTest
 @RunWith(AndroidJUnit4::class)
-class VantaBenchmarkJourneys {
+class VantaBenchmarkJourneysTest {
     @get:Rule
     val benchmarkRule = MacrobenchmarkRule()
 
@@ -130,7 +130,7 @@ private fun MacrobenchmarkScope.openQuickCaptureIfAvailable() {
 
 @LargeTest
 @RunWith(AndroidJUnit4::class)
-class VantaBaselineProfile {
+class VantaBaselineProfileTest {
     @get:Rule
     val profileRule = BaselineProfileRule()
 
