@@ -1,7 +1,7 @@
 # Vanta 2 Batch 5 Performance and Accessibility Review
 
 Date: 2026-10-22 | Branch: vanta2-batch3-batch4-integration
-Status: NOT MEASURED — source review and benchmark journey updates are complete; hosted Android builds do not provide startup/frame measurements, and no local emulator or device was available for benchmark runs.
+Status: NOT MEASURED — source review and benchmark journey updates are complete. An Android 16/API 36 Pixel 2 emulator was available, but the local Gradle launcher failed before project configuration, no Macrobenchmark test APK existed, and the installed CI app was blocked at sign-in. Exact setup and blockers are recorded in [Batch 5.1 Performance Evidence](VANTA2_BATCH51_PERFORMANCE_EVIDENCE.md).
 
 ## Baseline
 
@@ -14,7 +14,7 @@ The pre-Batch 5 baseline is the integrated Batch 3/4 source, reviewed in docs/VA
 - Upcoming/search observed the full pending occurrence list for the owner without a SQL limit.
 - Macrobenchmark and Baseline Profile source existed, but no measurements had run.
 
-There is no numeric before measurement. The local verification attempt of `:app:compileDebugKotlin --no-daemon --stacktrace` failed in Windows Java selector/loopback initialization with `java.io.IOException: Unable to establish loopback connection`, before Gradle project configuration; no local Kotlin compilation occurred. The final hosted Android release gate, including Task Detail/Edit and managed-device tests, passed in [run 39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499). `adb devices -l` is empty, so local screenshot and benchmark tasks did not run.
+There is no numeric before measurement. The local verification attempt of `:app:compileDebugKotlin --no-daemon --stacktrace` failed in Windows Java selector/loopback initialization with `java.io.IOException: Unable to establish loopback connection`, before Gradle project configuration; no local Kotlin compilation occurred. The final hosted Android release gate, including Task Detail/Edit and managed-device tests, passed in [run 39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499). During the Batch 5.1 performance attempt an API 36 emulator was available, but Gradle failed before configuring the benchmark module and no local performance task ran; see the evidence note.
 
 ## Changes reviewed
 
@@ -64,15 +64,15 @@ Task Detail/Edit now exists and its source/Compose tests cover opening and editi
 
 | Measurement | Baseline | Batch 5 | Status |
 |---|---:|---:|---|
-| Cold startup | Not measured | Not measured | Local Gradle failed before configuration; no benchmark device |
-| Warm startup | Not measured | Not measured | Local Gradle failed before configuration; no benchmark device |
-| Today scroll frame timing | Not measured | Not measured | No attached emulator/device |
-| Week/Habits navigation timing | Not measured | Not measured | No attached emulator/device |
-| Quick Capture open/dismiss timing | Not measured | Not measured | No attached emulator/device |
-| Task Detail/Edit open timing | Not measured | Not measured | Not in macrobenchmark journey; no seeded device fixture |
-| Generated Baseline Profile | None recorded | Not generated | Device profile task not run |
+| Cold startup | Not measured | Not measured | Gradle failed before project configuration, so the Macrobenchmark APK could not be built; see evidence note |
+| Warm startup | Not measured | Not measured | Gradle failed before project configuration, so the Macrobenchmark APK could not be built; see evidence note |
+| Today scroll frame timing | Not measured | Not measured | Macrobenchmark APK unavailable; installed CI app was at sign-in with no authenticated fixture |
+| Week/Habits navigation timing | Not measured | Not measured | Macrobenchmark APK unavailable; benchmark journey would skip dashboard navigation while signed out |
+| Quick Capture open/dismiss timing | Not measured | Not measured | Macrobenchmark APK unavailable; signed-out screen has no dashboard capture action |
+| Task Detail/Edit open timing | Not measured | Not measured | Not in the macrobenchmark journey; no signed-in seeded fixture or instrumentation APK |
+| Generated Baseline Profile | None recorded | Not generated | Gradle failed before profile tasks could be configured; no generated profile output |
 
-The benchmark source requests five iterations for startup and frame timing, but it has not produced any measurements. ADB returned no connected device. Do not interpret the source changes as proof that startup or scrolling has no regression.
+The benchmark source requests five iterations for startup and frame timing, but it has not produced any measurements. The emulator was available for inspection, but the benchmark toolchain could not build its instrumentation APK and its installed CI app was unauthenticated. Do not interpret the source changes as proof that startup or scrolling has no regression.
 
 ## Performance findings and limits
 
@@ -83,7 +83,7 @@ The benchmark source requests five iterations for startup and frame timing, but 
 - Startup still creates Room and the repository, initializes DataStore, creates notification channels, and schedules/collects notification and sync work in `SystemApplication.onCreate`; only optional Calendar and AI clients are lazy. Their startup cost has not been measured.
 - Timeline overlap analysis remains proportional to the number of scheduled tasks; there is no minute-by-task rendering grid. Busy-day UI cost has not been profiled.
 - Widget refresh remains local and event-driven. Device widget resize and AppWidget update cost were not measured.
-- The local Gradle blocker and missing emulator prevent local compilation, lint, instrumentation, Macrobenchmark, and baseline-profile generation. Hosted Android CI confirms compilation and managed-device tests, but does not provide performance measurements.
+- Local Macrobenchmark and Baseline Profile tasks remain unrun because Gradle fails during launcher-to-daemon loopback setup before project configuration. Hosted Android CI confirms compilation and managed-device tests, but does not provide performance measurements. See the evidence note for the exact toolchain error and device/artifact state.
 
 ## Accessibility review
 

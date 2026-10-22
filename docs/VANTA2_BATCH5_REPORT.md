@@ -52,33 +52,34 @@ The local Windows Gradle wrapper still fails before project configuration with `
 
 **PASS** — all 57 hosted managed-device tests passed in final run `39719944499` (0 failures, 0 errors, 0 skipped). This includes Task Detail/Edit, large-font scrolling, update-queue durability/reconciliation, and Room v8→v9 migration coverage.
 
-No Android device is attached locally. No screenshot matrix or interactive manual device session was completed.
+An Android 16/API 36 Pixel 2-profile AVD was used for a sign-in-only inspection of the CI debug APK. It was an emulator, not a physical device; the app could not pass sign-in because the CI artifact had no Supabase configuration. Seven unmodified screenshots capture sign-in at 1.0×, 1.3×, and 2.0×, including light/dark and keyboard states. No authenticated app surface or full screenshot matrix was reached. See [VANTA2_BATCH51_ACCESSIBILITY.md](VANTA2_BATCH51_ACCESSIBILITY.md).
 
 ## Performance
 
-**NOT MEASURED** — the source-level review found no new root-level second timer and verified bounded Week/widget queries, lazy Calendar/AI construction, and event-driven widget refresh. It also records known root collection and minute-recomposition risks. Macrobenchmark and Baseline Profile source exists but was not run, and there are no before/after numeric measurements. See [VANTA2_BATCH5_PERFORMANCE.md](VANTA2_BATCH5_PERFORMANCE.md).
+**NOT MEASURED** — no startup, frame-time, recomposition, or Baseline Profile measurements were produced. Local Gradle failed before benchmark configuration, and the signed-out CI app had no benchmark fixture. The source review records timer scope, query bounds, and known root collection/recomposition risks without claiming runtime results. See [VANTA2_BATCH5_PERFORMANCE.md](VANTA2_BATCH5_PERFORMANCE.md) and [VANTA2_BATCH51_PERFORMANCE_EVIDENCE.md](VANTA2_BATCH51_PERFORMANCE_EVIDENCE.md).
 
 ## Accessibility
 
-**PARTIAL** — source and Compose tests cover selected-state semantics, task-card labels, detail heading and control values, polite validation/save announcements, Week task action role, and a 1.8× font-scale scroll case. Device contrast, TalkBack traversal, keyboard operation, touch-target dimensions, reduced-motion behavior, and light/dark screenshots were not manually verified.
+**PARTIAL** — source and Compose tests cover selected-state semantics, task-card labels, detail heading and control values, polite validation/save announcements, Week task action role, and a 1.8× font-scale scroll case. On the AVD, sign-in was checked at 1.0×, 1.3×, and 2.0× in light/dark and keyboard/IME states; two sign-in hit areas were spot-checked. At 2.0×, the scrolled sign-in subtitle visibly passes beneath the status-bar icons. This emulator-only overlap remains unpatched. TalkBack traversal, measured contrast, reduced-motion behavior, authenticated screens, and widget accessibility were not verified.
 
 ## Security and Secret Scan
 
-The editor uses the existing authenticated owner-checked RPC; it does not add a direct table write or unrestricted JSON mutation. No Supabase database or policy files were changed. Gitleaks v8.30.1 scanned the Batch 5 commit range and final staged documentation diff with `--redact`; both found no committed or staged secrets. A broad workspace scan reported matches only in ignored or untracked local configuration and generated cache files, outside the pushed change set.
+The editor uses the existing authenticated owner-checked RPC; it does not add a direct table write or unrestricted JSON mutation. Batch 5.1 made no application, database, RPC, grant, or policy changes. Source review confirmed the update RPC's owner check, idempotency key, and scheduling-field allowlist; local pgTAP was not run because Docker's Linux engine could not start. Gitleaks scanned the final `docs/` acceptance artifacts with redaction and found no leaks. The earlier Batch 5 commit-range scan also reported no findings; no runtime database security result is claimed for this pass.
 
 ## Known Limitations
 
-1. Device screenshots and manual visual review were unavailable; no local interactive emulator/device session was available.
-2. Performance and Baseline Profile results are **NOT MEASURED**.
-3. Accessibility remains **PARTIAL** pending TalkBack, contrast, keyboard, touch-target, and motion review on device.
-4. Update-specific Supabase transport replay and retry are not exercised end-to-end because the repository client is not injectable; Room durability, payload mapping, delta shielding, and canonical reconciliation are covered.
-5. The editor omits reminders and advanced placement-window fields. Scheduled tasks cannot be changed back to Flexible through this existing RPC.
-6. Local-created tasks remain read-only until their initial create mutation syncs.
-7. Analytics still maps a null summary to a preparation state because its state model has no distinct query-failure value.
+1. Physical-device review was not run. Emulator screenshots cover sign-in only; authenticated app surfaces and the full screenshot matrix were unavailable because the CI artifact could not authenticate.
+2. At 2.0× font scale, scrolled sign-in copy overlaps the status-bar region in the tested AVD captures. Fix and retest this on a configured acceptance build.
+3. Performance and Baseline Profile results are **NOT MEASURED**; the Gradle loopback failure prevented local benchmark APK configuration.
+4. Accessibility is **PARTIAL** pending TalkBack, contrast, authenticated-flow keyboard and touch-target, reduced-motion, and expanded-screen review.
+5. Offline task-update transport E2E is **NOT RUN**. Room durability, delta shielding, payload mapping, canonical reconciliation, and retry metadata are covered; process-death replay, authenticated RPC transport, response loss, and server convergence were not exercised. Local pgTAP was not run because the Docker Linux engine was unavailable.
+6. The editor omits reminders and advanced placement-window fields. Scheduled tasks cannot be changed back to Flexible through this existing RPC.
+7. Local-created tasks remain read-only until their initial create mutation syncs.
+8. Analytics still maps a null summary to a preparation state because its state model has no distinct query-failure value.
 
 ## Recommended Next Step
 
-Capture the screenshot matrix and perform TalkBack, contrast, reduced-motion, and macrobenchmark checks on a seeded Android device. Keep Batch 6 deferred until these remaining Batch 5 checks are completed or explicitly accepted as unavailable.
+Use an isolated non-production backend and a seeded acceptance account to reach authenticated surfaces; correct and retest the 2.0× sign-in status-bar overlap, then complete TalkBack, contrast, keyboard, touch-target, reduced-motion, widget, and physical-device checks. Resolve the Windows Gradle loopback failure to run Macrobenchmark on a release-like build. Add an isolated app-to-local-Supabase test setup before claiming authenticated offline replay; include process-death, response-loss, retry, ownership, and canonical server/Room convergence. Keep Batch 6 deferred until these Batch 5 gates are complete or their limitations are explicitly accepted.
 
 ## Final Status
 
@@ -90,6 +91,26 @@ Task Detail/Edit: PASS (hosted build and instrumentation passed)
 Offline Task Editing: PASS for Room queue, restart, delta protection, payload and reconciliation; RPC transport replay is not integration-tested
 Performance: NOT MEASURED
 Accessibility: PARTIAL
-Worktree: clean after final report commit
+Worktree: CLEAN after the final documentation-only acceptance commit and push
 Batch 6: not started
 ```
+
+## Batch 5.1 Acceptance Gate
+
+**Hosted CI: PASS.** Source run [39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499) passed the full Android release gate, Deno, Edge Function, and consent checks. Documentation-only HEAD run [39721565799](https://github.com/KuantumKnight/Vanta/actions/runs/39721565799) also passed on `f96d27f19dbc70812f82803ef89679838934f4e2`.
+
+**Managed-device tests: PASS.** Run `39719944499` reports 57 tests, 0 failures, 0 errors, and 0 skipped.
+
+**Physical-device review: NOT RUN.** An Android 16/API 36 Pixel 2-profile emulator reached sign-in only; no physical Android device was available.
+
+**Accessibility: PARTIAL.** Sign-in-only emulator checks and their seven screenshots are documented. TalkBack, measured contrast, reduced motion, authenticated surfaces, and widgets remain unverified; the 2.0× status-bar overlap remains an open finding.
+
+**Performance: INSUFFICIENT EVIDENCE.** No benchmark measurements or Baseline Profile were produced. The local Gradle launcher failed before project configuration; source review is not a runtime measurement.
+
+**Offline update transport E2E: NOT RUN.** Hosted tests cover the Room mutation/reconciliation layer, not authenticated RPC replay or server convergence. The local Supabase stack could not start because Docker's Linux engine pipe was unavailable; pgTAP was not run.
+
+**Security regression: NONE FOUND.** No backend security code changed. Source review and the final documentation secret scan found no issue; runtime pgTAP checks were unavailable.
+
+**Known limitations:** No physical-device or authenticated-flow acceptance; the 2.0× sign-in inset overlap remains; performance metrics are unavailable; end-to-end task-update transport remains unverified.
+
+**Final Batch 5 status: PARTIAL.** Hosted CI and managed-device instrumentation pass, but the required offline transport E2E, performance measurements, and runtime accessibility acceptance are incomplete.
