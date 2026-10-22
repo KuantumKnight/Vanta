@@ -1,116 +1,63 @@
-# Vanta 2 Batch 5 Report
+# VANTA 2 — Batch 5 Final Closure
 
-Date: 2026-10-22 | Branch: `vanta2-batch3-batch4-integration`
+Date: 2026-10-22 · Branch: `vanta2-batch3-batch4-integration`
 
-## Summary
+Product source fix: `f1e4e3d682598854389f400595646d9743e0256c` (`adjustResize` for the sign-in IME)
 
-Batch 5 delivers the shared Vanta design system and the premium-experience pass across Today, navigation, Week, Habits, Analytics, Settings, Focus, Quick Capture, widgets, and notifications. It now also includes one-off task detail and editing from Today and Week, backed by the existing authenticated task-update RPC and the durable Room mutation queue.
+## Final status
 
-The task editor queues its sparse typed patch and optimistic Room image in one transaction. A Room v8→v9 migration adds update-specific payload and field-presence columns while preserving queued legacy mutations. Delta/bootstrap overlays continue to protect pending local changes. Replay uses the stable operation ID with `mcp_update_task_with_scheduling`, then replaces the optimistic row from an owner-scoped canonical read. No Supabase schema, RPC, grant, RLS policy, MCP tool, or planner algorithm was changed.
+**BATCH 5: PARTIAL.** Hosted source CI passed the final IME-fix run. Room-level mutation coverage passes, but authenticated offline update E2E did not get past fixture sign-in. Performance acceptance, physical-device review, and authenticated accessibility remain incomplete. No Batch 6 work started.
 
-## Implementation
+## Closure gate
 
-**PARTIAL** — the requested product work is implemented and the complete hosted release gate is green. The remaining evidence gap is the device-level visual/accessibility review and performance measurement; source and automated test coverage do not replace those checks.
-
-The shared design system adds semantic colors, typography, spacing, shapes, elevation, icons, layout, timeline, and motion tokens plus reusable card, section-header, chip, and empty-state components. Navigation uses Today, Week, and Habits as primary destinations, with Upcoming, Goals, Analytics, Review, and Settings in More. Existing planning, calendar, AI proposal, offline completion, notification scheduling, widget completion, and focus flows were preserved by source review.
-
-Today schedule projections are memoized across minute ticks. `TodayTimeline` still observes the minute clock at its parent and recomposes LazyColumn content on each tick; this isolates the expensive projection calculation but does not establish a frame-time improvement. The existing SOFT-only drag rule, snap/overlap checks, and time-picker alternative remain.
-
-## Task Detail/Edit
-
-**PASS** — Today and Week task rows open one shared detail sheet. The sheet opens in a read-only summary and offers a separate Edit mode for eligible tasks. The editor supports title, notes, date/time and all-day scheduling, duration, schedule type, priority, and deadline. It reuses the existing Quick Capture validator, applies a local optimistic update, queues sync without waiting for the network, and closes after the local save. Dirty edits prompt before discard. Focus and Complete actions remain available for pending tasks.
-
-Only pending, server-backed, one-off task occurrences can be edited. Habits, completed tasks, local-created tasks awaiting initial sync, and tasks with another queued mutation or completion are read-only. Recurring habit occurrences are not rewritten as one-off tasks. Flexible tasks can be scheduled; the existing RPC does not support reverting a scheduled task to Flexible, and the editor explains this constraint. Placement-window fields (`earliest_start`, `latest_end`, `preferred_start`) and reminders are not exposed in this editor.
-
-## Offline Task Editing
-
-**PASS** — validation, patch construction, durable queue insertion, and optimistic row replacement are atomic in Room. The update survives database close/reopen; incoming deltas preserve the queued local row while advancing the sync checkpoint; canonical reconciliation removes the queue row; and retry payload construction retains the same operation ID and field-presence/null semantics. The existing replay loop dispatches the update through `mcp_update_task_with_scheduling` and refetches the canonical row.
-
-The existing server RPC validates `auth.uid()` ownership, limits the scheduling payload to approved keys, and uses an idempotency key. Its existing pgTAP coverage for owner isolation/idempotency was inspected; no server migration or policy changed. Android tests do not inject the Supabase transport, so RPC dispatch, lost-response replay, and network error backoff were not exercised end-to-end for this new operation. Existing offline-completion retry tests cover the shared queue retry behavior, not the update transport itself.
-
-## Android CI
-
-**PASS** — the final hosted release gate run [39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499) passed on commit `5c787482691029b639565e15b241529d2286de0b`, including Task Detail/Edit and the managed-device suite. An earlier instrumentation run exposed a test assertion that expected an off-screen field to be visible; the test now scrolls that field into view, and the final run passed.
-
-| Gate | Result | Evidence |
+| Gate | Result | Evidence and limit |
 |---|---|---|
-| Gradle configuration | **PASS** | Final hosted release gate [39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499) |
-| Android JVM tests | **PASS** | Final hosted release gate `39719944499` |
-| Lint | **PASS** | Final hosted release gate `39719944499` |
-| Debug/release APKs | **PASS** | Final hosted release gate `39719944499` |
-| Android test APK | **PASS** | Final hosted release gate `39719944499` |
-| Managed-device instrumentation and Room migration tests | **PASS** | Final hosted release gate `39719944499` |
-| Deno shared tests | **PASS** | Final hosted release gate `39719944499`; 6 passed, 0 failed |
-| Deno Edge Function checks | **PASS** | Final hosted release gate `39719944499`; `mcp`, `expand-schedules`, `sync-push`, `send-reminders` |
-| Consent lint/build | **PASS** | Final hosted release gate `39719944499`; `web/consent` lint and build |
+| Hosted CI | **PASS** | Source run [39753761328](https://github.com/KuantumKnight/Vanta/actions/runs/39753761328) includes `f1e4e3d`; Android release gate, Consent site, and Edge Functions all passed. |
+| Managed-device instrumentation | **PASS** | Run [39753761328](https://github.com/KuantumKnight/Vanta/actions/runs/39753761328): 57 passed, 0 failed, 0 errors, 0 skipped. |
+| Offline authenticated update E2E | **NOT RUN** | Configured test sign-in/setup did not return a final instrumentation result. No task or E2E state file was created; no edit/replay scenario ran. |
+| Process-death recovery | **NOT RUN** | No pending authenticated update existed to persist or replay. |
+| Server/local convergence | **NOT RUN** | No app update reached the disposable server; task and occurrence counts remained zero. |
+| Delta-race protection | **NOT RUN (LIVE E2E)** | Room-level queued-row protection is covered by hosted tests; no authenticated server race ran. |
+| Cross-user authorization | **NOT RUN (LIVE E2E)** | Existing RPC ownership checks and SQL tests were reviewed; the harness’s user-B attempt never ran. |
+| Physical-device validation | **NOT RUN** | Device screenshots and IME checks used an Android 16/API 36 emulator only. |
+| Authenticated accessibility | **PARTIAL** | CI test APK had no Supabase configuration. Only the sign-in surface was available; TalkBack traversal, reduced motion, authenticated screens, and widgets were not verified. |
+| 2× font/status-bar issue | **PASS — EMULATOR SIGN-IN** | Run `39753761328` APK passed all six 1.0×/1.3×/2.0× keyboard-closed/open checks; the 63 px top inset remained and Gboard resized the viewport. |
+| Performance | **INSUFFICIENT EVIDENCE** | Five-iteration hosted emulator diagnostics are recorded, but the scroll stayed signed out and there is no representative device, authenticated route, or before/after baseline. |
+| Baseline Profile | **PASS — PIPELINE ONLY** | Generated and packaged; profile-required signed-out cold-start benchmark completed. Authenticated hot paths and physical-device impact were not measured. |
+| Security | **PASS — NO REGRESSION FOUND** | No backend security code changed. Existing owner scoping, idempotency, and patch allowlist were source-reviewed; pgTAP was not run in this closure. |
+| Secrets | **PASS** | Disposable E2E URL/publishable-key Actions secrets were deleted, the project was deleted and verified absent, and Gitleaks 8.30.0's redacted final range scan found zero leaks. |
+| Repository | **CLEAN** | Final acceptance reports and evidence are committed and pushed; the working tree is clean. |
+| **FINAL BATCH 5 STATUS** | **PARTIAL** | Hosted CI and lower-layer coverage do not replace the E2E, accessibility, device, and performance evidence listed above. |
 
-The release gate covers the app source commit above. The follow-up documentation-only commit does not alter that tested source tree.
+## Product work and automated coverage
 
-The local Windows Gradle wrapper still fails before project configuration with `Unable to establish loopback connection`; hosted Linux CI is the Android build/test evidence.
+Batch 5 delivered the shared design system and premium-experience updates across Today, navigation, Week, Habits, Analytics, Settings, Focus, Quick Capture, widgets, and notifications, plus one-off task detail/edit from Today and Week. The editor queues sparse typed patches with an optimistic Room update in one transaction, preserves pending edits across delta/bootstrap sync, and uses the existing owner-checked update RPC for replay. No database schema, RPC, grants, RLS policy, MCP tool, or planner algorithm was changed for Batch 5.
 
-## Instrumentation
+Hosted instrumentation on run `39747927644` passed all 57 managed-device tests, including Room v8→v9 migration, task editor coverage, mutation durability, stale-delta shielding, canonical reconciliation, and retry metadata. These tests do not establish end-to-end authenticated transport behavior.
 
-**PASS** — all 57 hosted managed-device tests passed in final run `39719944499` (0 failures, 0 errors, 0 skipped). This includes Task Detail/Edit, large-font scrolling, update-queue durability/reconciliation, and Room v8→v9 migration coverage.
+The isolated offline-update environment used disposable project `vanta2-batch51-offline-e2e-disposable` (ref `zmtouvlokhtbsmmcuxhy`) after user approval. All 23 migrations were applied and two disposable users were prepared. The Android workflow received only that project’s URL and publishable key; it received no service-role material. The selected phase-1 instrumentation began but did not finish sign-in/setup. It produced no task or state file, and all later scenarios were skipped. The project was deleted and verified absent; the two temporary `VANTA_E2E_*` Actions secrets were deleted. The unrelated `SYSTEM_*` repository secrets were retained. B later uninstalled the fixture APK and cleared app data; the private test-account file was confirmed absent, and the AVD was restored and returned.
 
-An Android 16/API 36 Pixel 2-profile AVD was used for a sign-in-only inspection of the CI debug APK. It was an emulator, not a physical device; the app could not pass sign-in because the CI artifact had no Supabase configuration. Seven unmodified screenshots capture sign-in at 1.0×, 1.3×, and 2.0×, including light/dark and keyboard states. No authenticated app surface or full screenshot matrix was reached. See [VANTA2_BATCH51_ACCESSIBILITY.md](VANTA2_BATCH51_ACCESSIBILITY.md).
+## Accessibility and device acceptance
 
-## Performance
+Sign-in was inspected on an Android 16/API 36 Pixel 2-profile emulator at 1.0×, 1.3×, and 2.0× text scale and a larger display-size setting. Authenticated surfaces remained unavailable. The initial APK reproduced a 2.0× keyboard-open status-bar overlap under `adjustPan`. The final APK from run `39753761328` uses `android:windowSoftInputMode="adjustResize"` and passed all six sign-in font-scale/IME checks: viewport `[0,63][1080,1857]` with Gboard closed and `[0,63][1080,1048]` with Gboard open. The focused field stayed visible, and IME Done dismissed Gboard. The final APK SHA-256 and six captures are recorded in [VANTA2_BATCH51_ACCESSIBILITY.md](VANTA2_BATCH51_ACCESSIBILITY.md).
 
-**NOT MEASURED** — no startup, frame-time, recomposition, or Baseline Profile measurements were produced. Local Gradle failed before benchmark configuration, and the signed-out CI app had no benchmark fixture. The source review records timer scope, query bounds, and known root collection/recomposition risks without claiming runtime results. See [VANTA2_BATCH5_PERFORMANCE.md](VANTA2_BATCH5_PERFORMANCE.md) and [VANTA2_BATCH51_PERFORMANCE_EVIDENCE.md](VANTA2_BATCH51_PERFORMANCE_EVIDENCE.md).
+TalkBack traversal, measured full-screen contrast, reduced-motion flows, authenticated screens, widget behavior, and a physical Android device were not verified. See the detailed test record and original/retest screenshots in [VANTA2_BATCH51_ACCESSIBILITY.md](VANTA2_BATCH51_ACCESSIBILITY.md) and `docs/evidence/vanta2-batch51-accessibility/`.
 
-## Accessibility
+## Performance and Baseline Profile
 
-**PARTIAL** — source and Compose tests cover selected-state semantics, task-card labels, detail heading and control values, polite validation/save announcements, Week task action role, and a 1.8× font-scale scroll case. On the AVD, sign-in was checked at 1.0×, 1.3×, and 2.0× in light/dark and keyboard/IME states; two sign-in hit areas were spot-checked. At 2.0×, the scrolled sign-in subtitle visibly passes beneath the status-bar icons. This emulator-only overlap remains unpatched. TalkBack traversal, measured contrast, reduced-motion behavior, authenticated screens, and widget accessibility were not verified.
+The benchmark workflow produced a Baseline Profile and package, and a profile-required cold-start benchmark completed. On the hosted API 36 emulator, five-run cold-start medians were 914.945 ms (default), 1,055.927 ms (no profile), and 947.811 ms (profile required); warm-start median was 392.794 ms. The signed-out scroll test recorded only 3–5 frames per iteration and never reached Today or Week. These values are diagnostic and do not establish a performance gain or regression on representative hardware.
 
-## Security and Secret Scan
+Today/Week frame timing, Quick Capture and Task Detail journeys, Focus recomposition, query latency/result counts, startup breakdown, and comparable Batch 3/4 measurements were not collected. Performance acceptance is **INSUFFICIENT EVIDENCE**. Baseline Profile is **PASS** for generation/packaging/required-profile pipeline only, not product-route coverage. Full data is in [VANTA2_BATCH5_FINAL_PERFORMANCE.md](VANTA2_BATCH5_FINAL_PERFORMANCE.md).
 
-The editor uses the existing authenticated owner-checked RPC; it does not add a direct table write or unrestricted JSON mutation. Batch 5.1 made no application, database, RPC, grant, or policy changes. Source review confirmed the update RPC's owner check, idempotency key, and scheduling-field allowlist; local pgTAP was not run because Docker's Linux engine could not start. Gitleaks scanned the final `docs/` acceptance artifacts with redaction and found no leaks. The earlier Batch 5 commit-range scan also reported no findings; no runtime database security result is claimed for this pass.
+## Security, cleanup, and secret scan
 
-## Known Limitations
+The task update reuses the existing authenticated owner-checked RPC, idempotency key, and scheduling-field allowlist. No backend security code was changed. Existing SQL tests/source were reviewed; Docker was unavailable for a local pgTAP run. This evidence supports no identified regression, not a fresh runtime authorization pass.
 
-1. Physical-device review was not run. Emulator screenshots cover sign-in only; authenticated app surfaces and the full screenshot matrix were unavailable because the CI artifact could not authenticate.
-2. At 2.0× font scale, scrolled sign-in copy overlaps the status-bar region in the tested AVD captures. Fix and retest this on a configured acceptance build.
-3. Performance and Baseline Profile results are **NOT MEASURED**; the Gradle loopback failure prevented local benchmark APK configuration.
-4. Accessibility is **PARTIAL** pending TalkBack, contrast, authenticated-flow keyboard and touch-target, reduced-motion, and expanded-screen review.
-5. Offline task-update transport E2E is **NOT RUN**. Room durability, delta shielding, payload mapping, canonical reconciliation, and retry metadata are covered; process-death replay, authenticated RPC transport, response loss, and server convergence were not exercised. Local pgTAP was not run because the Docker Linux engine was unavailable.
-6. The editor omits reminders and advanced placement-window fields. Scheduled tasks cannot be changed back to Flexible through this existing RPC.
-7. Local-created tasks remain read-only until their initial create mutation syncs.
-8. Analytics still maps a null summary to a preparation state because its state model has no distinct query-failure value.
+The disposable Supabase project and temporary `VANTA_E2E_*` Actions secrets were removed. Gitleaks 8.30.0 scanned the final acceptance commit range with full redaction and found zero leaks. The final reports and evidence are committed and pushed with a clean working tree.
 
-## Recommended Next Step
+## Remaining blockers and next step
 
-Use an isolated non-production backend and a seeded acceptance account to reach authenticated surfaces; correct and retest the 2.0× sign-in status-bar overlap, then complete TalkBack, contrast, keyboard, touch-target, reduced-motion, widget, and physical-device checks. Resolve the Windows Gradle loopback failure to run Macrobenchmark on a release-like build. Add an isolated app-to-local-Supabase test setup before claiming authenticated offline replay; include process-death, response-loss, retry, ownership, and canonical server/Room convergence. Keep Batch 6 deferred until these Batch 5 gates are complete or their limitations are explicitly accepted.
+1. Authenticated offline-update E2E must be debugged and rerun before claiming process-death replay, response-loss behavior, server convergence, live delta-race protection, or cross-user denial.
+2. Complete physical-device and authenticated accessibility checks, and representative-device performance measurements with controlled data before treating Batch 5 acceptance as complete.
 
-## Final Status
-
-```text
-Implementation: PARTIAL (manual visual/accessibility evidence and performance measurements remain unavailable)
-Android CI: PASS (run 39719944499 on source commit 5c787482691029b639565e15b241529d2286de0b)
-Instrumentation: PASS (run 39719944499, including Room migrations and Task Detail/Edit coverage)
-Task Detail/Edit: PASS (hosted build and instrumentation passed)
-Offline Task Editing: PASS for Room queue, restart, delta protection, payload and reconciliation; RPC transport replay is not integration-tested
-Performance: NOT MEASURED
-Accessibility: PARTIAL
-Worktree: CLEAN after the final documentation-only acceptance commit and push
-Batch 6: not started
-```
-
-## Batch 5.1 Acceptance Gate
-
-**Hosted CI: PASS.** Source run [39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499) passed the full Android release gate, Deno, Edge Function, and consent checks. Documentation-only HEAD run [39721565799](https://github.com/KuantumKnight/Vanta/actions/runs/39721565799) also passed on `f96d27f19dbc70812f82803ef89679838934f4e2`.
-
-**Managed-device tests: PASS.** Run `39719944499` reports 57 tests, 0 failures, 0 errors, and 0 skipped.
-
-**Physical-device review: NOT RUN.** An Android 16/API 36 Pixel 2-profile emulator reached sign-in only; no physical Android device was available.
-
-**Accessibility: PARTIAL.** Sign-in-only emulator checks and their seven screenshots are documented. TalkBack, measured contrast, reduced motion, authenticated surfaces, and widgets remain unverified; the 2.0× status-bar overlap remains an open finding.
-
-**Performance: INSUFFICIENT EVIDENCE.** No benchmark measurements or Baseline Profile were produced. The local Gradle launcher failed before project configuration; source review is not a runtime measurement.
-
-**Offline update transport E2E: NOT RUN.** Hosted tests cover the Room mutation/reconciliation layer, not authenticated RPC replay or server convergence. The local Supabase stack could not start because Docker's Linux engine pipe was unavailable; pgTAP was not run.
-
-**Security regression: NONE FOUND.** No backend security code changed. Source review and the final documentation secret scan found no issue; runtime pgTAP checks were unavailable.
-
-**Known limitations:** No physical-device or authenticated-flow acceptance; the 2.0× sign-in inset overlap remains; performance metrics are unavailable; end-to-end task-update transport remains unverified.
-
-**Final Batch 5 status: PARTIAL.** Hosted CI and managed-device instrumentation pass, but the required offline transport E2E, performance measurements, and runtime accessibility acceptance are incomplete.
+**Recommended next action:** proceed with the remaining Batch 5 acceptance gaps: authenticated offline-update E2E, physical-device and authenticated accessibility checks, and representative-device performance measurements. Keep Batch 6 deferred until these blockers are resolved or explicitly accepted.

@@ -1,20 +1,20 @@
 # Vanta 2 Batch 5 Performance and Accessibility Review
 
-Date: 2026-10-22 | Branch: vanta2-batch3-batch4-integration
-Status: NOT MEASURED — source review and benchmark journey updates are complete. An Android 16/API 36 Pixel 2 emulator was available, but the local Gradle launcher failed before project configuration, no Macrobenchmark test APK existed, and the installed CI app was blocked at sign-in. Exact setup and blockers are recorded in [Batch 5.1 Performance Evidence](VANTA2_BATCH51_PERFORMANCE_EVIDENCE.md).
+Date: 2026-10-22 | Review branch: `vanta2-batch3-batch4-integration`; isolated measurement harness: `vanta2-perf-closure`
+Status: INSUFFICIENT EVIDENCE — an opt-in hosted API 36 emulator retry collected startup and signed-out scroll samples, and generated, packaged, and exercised a Baseline Profile. Emulator performance is explicitly non-representative; the run had no authenticated fixture, and no Focus recomposition, query-latency, or startup-breakdown instrumentation. No acceptance-grade device metrics exist. See [final performance evidence](VANTA2_BATCH5_FINAL_PERFORMANCE.md) and the [Batch 5.1 measurement record](VANTA2_BATCH51_PERFORMANCE_EVIDENCE.md).
 
 ## Baseline
 
 The pre-Batch 5 baseline is the integrated Batch 3/4 source, reviewed in docs/VANTA2_REGRESSION_PERFORMANCE_AUDIT.md on 2026-10-21. It established:
 
-- Calendar and AI clients were lazy; analytics, habit, briefing, and review aggregation ran off the main thread.
+- Calendar repository and AI client construction were behind lazy delegates; signed-in root Calendar-flow subscriptions can initialize the repository. Analytics, habit, briefing, and review aggregation ran off the main thread.
 - Week data was range-bounded; analytics/history were date-bounded; widget reads were owner-scoped and bounded.
 - The Focus countdown updated once per second in a resumed leaf composable.
 - Today’s current-time tick was minute-level and lived inside the timeline.
 - Upcoming/search observed the full pending occurrence list for the owner without a SQL limit.
 - Macrobenchmark and Baseline Profile source existed, but no measurements had run.
 
-There is no numeric before measurement. The local verification attempt of `:app:compileDebugKotlin --no-daemon --stacktrace` failed in Windows Java selector/loopback initialization with `java.io.IOException: Unable to establish loopback connection`, before Gradle project configuration; no local Kotlin compilation occurred. The final hosted Android release gate, including Task Detail/Edit and managed-device tests, passed in [run 39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499). During the Batch 5.1 performance attempt an API 36 emulator was available, but Gradle failed before configuring the benchmark module and no local performance task ran; see the evidence note.
+There is no numeric before measurement. The local verification attempt of `:app:compileDebugKotlin --no-daemon --stacktrace` failed in Windows Java selector/loopback initialization with `java.io.IOException: Unable to establish loopback connection`, before Gradle project configuration; no local Kotlin compilation occurred. The final hosted Android release gate, including Task Detail/Edit and managed-device tests, passed in [run 39747927644](https://github.com/KuantumKnight/Vanta/actions/runs/39747927644). The first hosted API 36 benchmark attempt rejected all Macrobenchmark methods at the emulator check; an opt-in retry suppressed only that warning and collected diagnostic emulator samples. See the final evidence report for measured values, route coverage, profile evidence, and limits.
 
 ## Changes reviewed
 
@@ -64,26 +64,30 @@ Task Detail/Edit now exists and its source/Compose tests cover opening and editi
 
 | Measurement | Baseline | Batch 5 | Status |
 |---|---:|---:|---|
-| Cold startup | Not measured | Not measured | Gradle failed before project configuration, so the Macrobenchmark APK could not be built; see evidence note |
-| Warm startup | Not measured | Not measured | Gradle failed before project configuration, so the Macrobenchmark APK could not be built; see evidence note |
-| Today scroll frame timing | Not measured | Not measured | Macrobenchmark APK unavailable; installed CI app was at sign-in with no authenticated fixture |
-| Week/Habits navigation timing | Not measured | Not measured | Macrobenchmark APK unavailable; benchmark journey would skip dashboard navigation while signed out |
-| Quick Capture open/dismiss timing | Not measured | Not measured | Macrobenchmark APK unavailable; signed-out screen has no dashboard capture action |
-| Task Detail/Edit open timing | Not measured | Not measured | Not in the macrobenchmark journey; no signed-in seeded fixture or instrumentation APK |
-| Generated Baseline Profile | None recorded | Not generated | Gradle failed before profile tasks could be configured; no generated profile output |
+| Cold startup, default compilation | Not measured | 914.9 ms median (883.8–1022.7 ms, n=5) | Hosted API 36 x86_64 emulator only; provisional, not acceptance-grade. |
+| Cold startup, no Baseline Profile | Not measured | 1055.9 ms median (950.3–1071.1 ms, n=5) | `CompilationMode.None`; same emulator and limitations. |
+| Cold startup, Baseline Profile required | Not measured | 947.8 ms median (861.8–1105.4 ms, n=5) | `BaselineProfileMode.Require` completed; not a valid profile speedup comparison. |
+| Warm startup | Not measured | 392.8 ms median (174.3–908.1 ms, n=5; CV 0.605) | Highly variable emulator result; provisional only. |
+| Signed-out scroll frame metrics | Not measured | CPU frame P50/P90/P95/P99: 180.1/486.5/540.7/734.5 ms | Journey remained at sign-in; not Today/Week timing and not acceptance-grade. |
+| Today/Week scroll and navigation | Not measured | **NOT MEASURED** | No authenticated dashboard fixture; destination discovery returned before dashboard actions. |
+| Quick Capture open/dismiss | Not measured | **NOT MEASURED** | The signed-out screen has no dashboard capture action. |
+| Task Detail/Edit open | Not measured | **NOT MEASURED** | Not in the macrobenchmark journey; no seeded task fixture. |
+| Focus recomposition/frame cost | Not measured | **NOT MEASURED** | Source audit only; no Compose recomposition counter or trace analysis. |
+| DAO/query latency and row counts | Not measured | **NOT MEASURED** | Source bounds were reviewed; no authenticated dataset or runtime query instrumentation. |
+| Generated/packaged profile | None measured before Batch 5 | Generated and packaged for signed-out startup; required-profile startup test completed | Profile collection was not authenticated and the BaselineProfileRule's emulator run was skipped by its emulator assumption. |
 
-The benchmark source requests five iterations for startup and frame timing, but it has not produced any measurements. The emulator was available for inspection, but the benchmark toolchain could not build its instrumentation APK and its installed CI app was unauthenticated. Do not interpret the source changes as proof that startup or scrolling has no regression.
+All reported timings come from [hosted retry run 39749603818](https://github.com/KuantumKnight/Vanta/actions/runs/39749603818), with the emulator error explicitly suppressed for diagnostics. They describe a two-core, x86_64 Android 16/API 36 emulator and a signed-out launch, not a representative user device. The first unsuppressed run [39747774113](https://github.com/KuantumKnight/Vanta/actions/runs/39747774113) generated and packaged a profile but failed before collecting any Macrobenchmark samples. Do not interpret emulator differences between profiled and unprofiled modes as a speedup or infer authenticated screen performance from the signed-out scroll journey.
 
 ## Performance findings and limits
 
 - The root continues to collect the full owner-scoped pending list for Upcoming/search. Its Room query has no LIMIT. The Week planner is separately limited to 700 dated rows and 100 flexible rows. Paging the pending list is deferred until account-scale measurements justify changing data access.
 - VantaRoot still owns many screen states and observes Today/selected-week planner flows even when another destination is active. No root timer loop exists; only the Today clock and resumed Focus timer tick. Recomposition scope should be verified with Compose tracing on device.
 - More specifically, VantaRoot always collects the owner-scoped pending list, completion queue, preferences, current-week and selected-week planner rows, and Calendar status/catalog/date-range flows. Destination-specific habit, analytics, briefing, and review projections are loaded from root effects when their destination is selected, but the state holders remain at the root. This is a source-level recomposition risk, not evidence that every screen recomposes for each emission.
-- Analytics, habit, briefing, and review aggregation remain on Dispatchers.Default by prior source audit. Calendar and AI client construction remain lazy. Startup source was not redesigned.
-- Startup still creates Room and the repository, initializes DataStore, creates notification channels, and schedules/collects notification and sync work in `SystemApplication.onCreate`; only optional Calendar and AI clients are lazy. Their startup cost has not been measured.
+- Analytics, habit, briefing, and review aggregation remain on Dispatchers.Default by prior source audit. The AI plan client is lazy until planning is requested. The Calendar repository is behind a lazy delegate, but signed-in `VantaRoot` observations access it to subscribe to calendar flows; no startup attribution was measured.
+- Startup still creates Room and the repository, initializes DataStore, creates notification channels, and schedules/collects notification and sync work in `SystemApplication.onCreate`. Macrobenchmark measured initial display only; it did not isolate these components' startup cost.
 - Timeline overlap analysis remains proportional to the number of scheduled tasks; there is no minute-by-task rendering grid. Busy-day UI cost has not been profiled.
 - Widget refresh remains local and event-driven. Device widget resize and AppWidget update cost were not measured.
-- Local Macrobenchmark and Baseline Profile tasks remain unrun because Gradle fails during launcher-to-daemon loopback setup before project configuration. Hosted Android CI confirms compilation and managed-device tests, but does not provide performance measurements. See the evidence note for the exact toolchain error and device/artifact state.
+- Local Gradle tasks remain blocked by the Windows launcher-to-daemon loopback failure. Hosted Android CI generated and packaged a signed-out profile and collected provisional emulator timings only after explicitly suppressing the emulator warning. No acceptance-grade performance measurements were obtained. See the final evidence report for exact device and run details.
 
 ## Accessibility review
 

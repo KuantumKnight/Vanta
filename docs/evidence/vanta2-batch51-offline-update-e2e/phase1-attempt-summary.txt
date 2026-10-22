@@ -1,0 +1,23 @@
+Vanta 2 Batch 5.1 offline update E2E — phase 1 attempt record
+Date: 2026-10-22 (local device date)
+Device: emulator-5554, Android 16 / API 36, x86_64 AVD
+Workflow run: 39750915501
+Instrumentation target: dev.system.app.data.OfflineUpdateFixtureSetupTest#phase1CreateAndSyncTaskAsAuthenticatedUserA
+
+Attempt 1 adb output (instrumentation did not emit a final RESULT):
+INSTRUMENTATION_STATUS: class=dev.system.app.data.OfflineUpdateFixtureSetupTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: test=phase1CreateAndSyncTaskAsAuthenticatedUserA
+INSTRUMENTATION_STATUS_CODE: 1
+
+The adb process remained active for several minutes after the start status and was stopped. A bounded retry emitted the same start status, produced no completion after 60 seconds, and was cancelled. Logcat showed the Supabase client initializing and no stored session, followed by the test start; no assertion result was recorded.
+
+Post-attempt checks:
+- app-private `offline-e2e-state.json`: absent
+- `public.tasks` row count: 0
+- `public.task_occurrences` row count: 0
+- app restored online and opened to MainActivity; no authenticated session was present
+
+This is an operator summary of captured command/device/database results. It is not a passing test report. No credentials, tokens, user IDs, or request bodies are included.

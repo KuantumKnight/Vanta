@@ -1,60 +1,52 @@
-# Vanta 2 Batch 5.1 — Offline Task Update E2E
+# Vanta 2 Batch 5.1 — Authenticated Offline Update E2E
 
-Date: 2026-10-22
-Branch: `vanta2-batch3-batch4-integration`
-App source commit under test: `5c787482691029b639565e15b241529d2286de0b`
-Hosted Android evidence: [run 39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499)
+Date: 2026-10-22 · Branch: `vanta2-batch3-batch4-integration`
+Acceptance source commit: `8d2aaa09c629aeb29b4ebdd3a17a4c0b711ae864` · Hosted source gate: [run 39747927644](https://github.com/KuantumKnight/Vanta/actions/runs/39747927644)
 
 ## Verdict
 
-**Offline task-update transport E2E: NOT RUN.** The hosted Android gate passed its 57 managed-device tests, but those tests exercise the Room mutation store and reconciliation methods with local test doubles. They do not run `SystemRepository` through an authenticated Supabase transport. No production endpoint, real account, or credential value was used.
+**Offline authenticated task-update E2E: NOT RUN TO COMPLETION.** The disposable backend and configured APKs were prepared, but the fixture instrumentation did not finish its initial sign-in/setup phase. It created neither an E2E state file nor a local or remote task, so no offline edit, process-death replay, authenticated RPC, or convergence scenario was executed.
 
-## Test environment and safety
+This is an incomplete run, not a passing result and not a failing product assertion. The instrumentation runner emitted its test-start status and then remained active without returning a result. Two attempts were stopped after the second bounded retry also produced no completion. No later phase was run.
 
-- This Windows host has Supabase CLI 2.117.0 at `node_modules/.bin/supabase.cmd` and Docker Desktop installed. The Docker Desktop service could not be opened from this session, and starting the Desktop app did not bring up the Linux engine.
-- `supabase/config.toml` identifies project `system`, configures the auth site for `http://localhost:3000`, and has no seed SQL file configured. The existing SQL tests create synthetic `.invalid` accounts inside transactions and roll those transactions back.
-- An internal search output included the URL/publishable-key line from `android/local.properties`; neither value was used in a test. The values are omitted here.
-- There is no dedicated disposable Supabase project/account configured for this test. `SystemRepository` creates its Supabase client from `BuildConfig`, which Gradle derives directly from `android/local.properties`; it has no injected transport/client seam. `isConfigured` also requires an `https://` URL, while the local Supabase stack exposes HTTP by default.
-- Local startup attempt: `Start-Service -Name com.docker.service` failed with “Cannot open 'com.docker.service' service on computer '.'.” Then `supabase start` exited 1 with `failed to inspect container health: failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.` Starting Docker Desktop did not provide the Linux engine. Its processes were stopped when free RAM reached about 1.69 GB; service remained stopped, the engine unavailable, and the final memory recheck showed about 1.77 GB free. `db reset` and pgTAP were not run.
+## Isolated environment
 
-## Scenario results
+- The user approved the disposable Supabase project `vanta2-batch51-offline-e2e-disposable` in KuantumKnight’s Org, ref `zmtouvlokhtbsmmcuxhy`. It is isolated from production.
+- All 23 repository migrations were applied. The expected public schema and RLS state were checked. Two disposable auth identities exist.
+- The configured debug and instrumentation APKs came from APK-only workflow run [39750915501](https://github.com/KuantumKnight/Vanta/actions/runs/39750915501), artifact `12412778424`, built from the isolated E2E harness revision `5524678abd687e7b1e7aa0ecdeb017ae165d7943`.
+- The workflow receives only `VANTA_E2E_SUPABASE_URL` and `VANTA_E2E_SUPABASE_PUBLISHABLE_KEY`. No service-role credential was supplied to Android. The two test-account records were staged in the app-private files directory with mode `600`; credentials are omitted from this report and were not sent to another agent.
+- The AVD was Android 16/API 36, Pixel 2 profile, `sdk_gphone64_x86_64`, 1080 × 1920 at 420 dpi. It is an emulator, not a physical device.
+- Before and after the attempts, read-only database counts showed `tasks=0` and `task_occurrences=0`. `offline-e2e-state.json` was absent. The test app was left online and open to `MainActivity` for the accessibility handoff.
 
-| Scenario | Result | Evidence |
+The evidence was collected, then `supabase projects delete --yes zmtouvlokhtbsmmcuxhy` confirmed deletion of the disposable project. A Supabase project-list check no longer returns its name or ref. Repository Actions secrets `VANTA_E2E_SUPABASE_URL` and `VANTA_E2E_SUPABASE_PUBLISHABLE_KEY` were removed; the unrelated existing `SYSTEM_*` secrets were left intact. After B's keyboard-inset retest, the old fixture APK was uninstalled and `pm clear` removed app data. `run-as` confirmed that `files/offline-e2e-secrets.json` and all app-private files were absent; font scale and density were restored and the AVD was returned on the launcher.
+
+## Attempt record
+
+The phase-1 command selected only `OfflineUpdateFixtureSetupTest#phase1CreateAndSyncTaskAsAuthenticatedUserA`. AndroidJUnitRunner reported that the test started, and the app initialized the Supabase client with no prior stored session. It did not return a final instrumentation result. The first adb client remained active for several minutes; the retry was allowed 60 seconds and was then cancelled. The application was force-stopped and relaunched, restoring the emulator to an online, signed-out state.
+
+The test harness source is on the isolated E2E branch. It includes phases for authenticated fixture creation, offline UI edit, force-stop/restart persistence, replay and delta handling, cross-user/allowlist checks, and post-reconnect UI. Those methods are **not execution evidence** because phase 1 never completed.
+
+## Required scenario results
+
+| Required scenario | Result | Evidence / limit |
 |---|---|---|
-| C2 — offline edit updates Room and UI immediately | **NOT TESTED** | `SystemDaoOfflineQueueTest.taskUpdateMutationAndOptimisticImageSurviveReopenAndReconcileFromCanonicalRow` stores a typed mutation and optimistic Room row, but it does not exercise the screen or repository with the network unavailable. |
-| C3 — pending edit survives Android process death | **NOT TESTED** | The same instrumentation test closes and reopens Room, proving database durability; it does not kill/relaunch the application process. |
-| C4 — reconnect replays through authenticated RPC and converges | **NOT TESTED** | No authenticated app-to-Supabase transport run or server-state readback was performed. Repository code dispatches `mcp_update_task_with_scheduling` and reads the canonical occurrence, but this was source inspection only. |
-| C5 — duplicate delivery has a safe server effect | **NOT TESTED** | `vanta2_scheduling_semantics.test.sql` contains an idempotent scheduling-update replay assertion, but pgTAP was not executed in this pass. No real transport retry was simulated. |
-| C6 — server applies update, response is lost, then replay | **NOT TESTED** | No request proxy, response-loss test, or authenticated transport harness was available. |
-| C7 — server delta arrives while a task update is pending | **PASS — Room layer only** | `taskUpdateMutationAndOptimisticImageSurviveReopenAndReconcileFromCanonicalRow` applies a stale delta through the DAO, confirms the optimistic row remains and the checkpoint advances, then reconciles a canonical row. A live server/delta race was not tested. |
-| C8 — app restarts after server success but before local acknowledgement | **NOT TESTED** | The server-success/local-acknowledgement boundary was not simulated. |
-| C9 — authenticated owner isolation denies a foreign task | **NOT TESTED** | `vanta2_scheduling_semantics.test.sql` includes an owner-scoped update assertion using synthetic users, but it was not executed in this pass. No account data was changed. |
-| C10 — timeout/5xx retries back off and eventually succeed | **NOT TESTED** | Room instrumentation verifies persisted retry count/next-attempt scheduling for the queued update, but no transport failure, server response, or eventual network success was exercised. |
-| C11 — server rejects unsupported patch fields | **NOT TESTED** | The RPC source rejects keys outside its scheduling-field allowlist. No runtime pgTAP/API rejection was exercised in this pass. |
+| Basic offline edit | **NOT RUN** | Fixture creation/sign-in did not complete; no task was available to edit. |
+| Process-death persistence | **NOT RUN** | No pending update existed and no app-process death was exercised. |
+| Reconnect replay | **NOT RUN** | No offline-to-online RPC was observed. |
+| Server convergence | **NOT RUN** | No app update reached the server; final counts remained zero. |
+| Delta-race protection | **NOT RUN — LIVE E2E** | Hosted Room instrumentation covers a local stale-delta/queued-row case, but no authenticated server delta race ran in this attempt. |
+| Ambiguous-response replay | **NOT RUN — LIVE E2E** | The isolated harness has a test-level same-operation acknowledgement-discard equivalent, but it was never executed and does not drop a real HTTP response. |
+| Cross-user authorization | **NOT RUN — LIVE E2E** | The harness includes an authenticated user-B check; it was never executed. Existing RPC/pgTAP source was reviewed separately. |
+| Patch allowlist | **NOT RUN — LIVE E2E** | The harness includes unsupported-field rejection; it was never executed. Existing RPC validation was source-reviewed. |
+| Retry/backoff | **NOT RUN — LIVE E2E** | No transport failure or replay cycle ran. Persisted retry metadata coverage in Room is lower-layer evidence only. |
 
-## Existing coverage that did pass
+## Lower-layer coverage that remains valid
 
-In hosted run `39719944499`, the Android managed-device suite passed all 57 tests. The task-update Room test verifies optimistic row persistence over a database close/reopen, typed-field presence and explicit-null serialization, stable operation ID and retry timing, delta shielding/checkpoint advancement, and canonical-row reconciliation. Another test verifies rejection of a wrong owner ID, habit/local IDs, and conflicting queued work. These are valuable local persistence checks, not proof of network replay.
-
-The source-reviewed RPC `mcp_update_task_with_scheduling` uses the existing authenticated function grant, scopes the occurrence by `auth.uid()`, applies a request idempotency key, and rejects unknown scheduling keys. Existing pgTAP coverage is authored for owner scoping and idempotent replay, but hosted CI does not run pgTAP.
-
-## Safe backend-only reproduction
-
-After the local Docker Linux engine is available, these commands target only the local project. Do not substitute `--linked` or pass a remote database URL:
-
-```powershell
-.\node_modules\.bin\supabase.cmd start
-.\node_modules\.bin\supabase.cmd db reset --local --no-seed
-.\node_modules\.bin\supabase.cmd test db --local supabase/tests/vanta2_scheduling_semantics.test.sql supabase/tests/system_hardening.test.sql
-```
-
-Those commands can validate the SQL owner/idempotency assertions; they do **not** complete C2–C10's Android transport lifecycle. They were not run because the local Docker engine could not start. The app-level test still needs an isolated integration build configuration that points only to local Supabase, a disposable local auth session, and a controllable response-loss/retry seam. The current local-properties file was not used for test setup.
+Hosted Android release gate [39747927644](https://github.com/KuantumKnight/Vanta/actions/runs/39747927644) passed all 57 managed-device tests with 0 failures, 0 errors, and 0 skips. Existing Room tests exercise durable mutation state, delta shielding, canonical reconciliation, and retry metadata. The repository's existing RPC source and SQL tests cover owner scoping, idempotency, and the scheduling-field allowlist; pgTAP was not run for this closure attempt. These results do not prove the authenticated Android transport lifecycle.
 
 ## Remaining blockers
 
-1. No end-to-end app-to-backend fixture currently supplies an isolated Supabase URL/key without using `android/local.properties`.
-2. The repository-owned Supabase client is constructed directly and is not transport-injectable, so response-loss and transient HTTP failure cannot be controlled in existing tests.
-3. The local Supabase HTTP endpoint does not satisfy the app's current `https://` configured check without an isolated test-only endpoint setup.
-4. A physical device or dedicated AVD and disposable auth account are required to verify actual process termination, offline editing, reconnect, and authenticated server convergence.
-
-Do not mark offline update transport E2E PASS until those scenarios run against a disposable authenticated backend and the server and Room states converge after retry.
+1. Diagnose why the configured app's phase-1 authentication/setup instrumentation does not complete, then rerun it with a bounded test timeout and capture a final test result.
+2. Only after a fixture is created, run offline edit, actual force-stop/relaunch, normal reconnect replay, delta race, authorized user-B denial, unsupported-field rejection, retry/backoff, and server/Room/UI convergence.
+3. The harness's acknowledgement-discard case is not a wire-level lost-response simulation. A true response-loss boundary remains necessary for a complete A7 result.
+Do not mark this gate PASS until the app authenticates through the disposable backend and the required persistence, replay, security, and convergence assertions complete.

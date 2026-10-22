@@ -3,7 +3,7 @@
 Date: 2026-10-22
 Branch: `vanta2-batch3-batch4-integration`
 Source revision inspected: `f96d27f`
-Result: **NOT MEASURED**. No startup, frame-time, recomposition, query-latency, or Baseline Profile values were collected. The source audit below is not runtime performance evidence.
+Result: **INSUFFICIENT EVIDENCE**. This initial local attempt produced no startup, frame-time, recomposition, query-latency, or Baseline Profile output. A later hosted run generated a signed-out Baseline Profile but no acceptance-grade performance measurements; see the hosted follow-up addendum below. The source audit is not runtime performance evidence.
 
 ## Measurement attempt and blockers
 
@@ -29,7 +29,7 @@ Environment: Gradle wrapper 9.6.0, Temurin OpenJDK 17.0.20.1. Both attempts retu
 | Today scroll and navigation (`FrameTimingMetric`) | **NOT MEASURED** | Same build blocker; installed app was unauthenticated, so dashboard navigation and task data were unavailable. |
 | Quick Capture open/dismiss | **NOT MEASURED** | Same build blocker; the sign-in screen does not expose the dashboard action. |
 | Task Detail/Edit | **NOT MEASURED** | Not included in the current macro journey, with no signed-in disposable fixture or benchmark APK. |
-| Generated Baseline Profile | **NOT GENERATED** | Gradle failed before profile task configuration; no profile output was found. |
+| Generated Baseline Profile | **GENERATED LATER — SIGNED-OUT ONLY** | This initial local attempt produced no profile. Hosted run `39747774113` later completed an 84.9-second collection and packaged `baseline.prof` and `baseline.profm`, but authenticated routes were not exercised. |
 | Focus recomposition count / frame cost | **NOT MEASURED** | No Compose tracing, Layout Inspector, or recomposition counter capture was made. |
 | DAO/query duration or returned-row counts | **NOT MEASURED** | No authenticated local dataset or query instrumentation run was available. |
 | Startup trace / lazy initialization cost | **NOT MEASURED** | No startup trace or runtime profile was collected. |
@@ -57,3 +57,9 @@ Calendar repository and authorization are held in lazy delegates in `VantaRoot` 
 ## Reproduction conditions
 
 Retry after the local Gradle/JDK selector failure is resolved and the Macrobenchmark APK can be built. Keep the measurement release-like, use a benchmark-capable emulator or device, and collect the existing five-iteration startup and frame journeys plus the profile journey. To measure dashboard routes, provide a disposable authenticated test account with controlled local data; the current signed-out fallback deliberately skips dashboard navigation rather than fabricating state. Save the benchmark output and device/build metadata before comparing it to a baseline. No regression or performance target can be assessed from this attempt.
+
+## Hosted follow-up addendum
+
+Hosted performance workflow [39747774113](https://github.com/KuantumKnight/Vanta/actions/runs/39747774113) on `6ac4d5d835882d02cba6811a2ec28cb1020c28ad` generated and packaged a Baseline Profile in 84.9 seconds. The output contains `assets/dexopt/baseline.prof` and `assets/dexopt/baseline.profm`. The profile journey used a signed-out app and therefore is not evidence for authenticated Today, Week, Quick Capture, or task-detail flows.
+
+All five Macrobenchmark measurement methods were rejected before collecting samples with `AssumptionViolatedException` for `ERRORS (not suppressed): EMULATOR`. The target was a hosted Android 16/API 36 x86_64 emulator, not a physical or representative device. Retry [39749603818](https://github.com/KuantumKnight/Vanta/actions/runs/39749603818) was launched with the emulator warning explicitly suppressed for provisional diagnostics; any resulting emulator-only data remains non-acceptance evidence. Full status and measurement limits are recorded in [VANTA2_BATCH5_FINAL_PERFORMANCE.md](VANTA2_BATCH5_FINAL_PERFORMANCE.md).
