@@ -60,48 +60,78 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Create and boot API 36 emulator
+        timeout-minutes: 12
         run: |
-          echo no | avdmanager create avd --force --name vanta-perf-api36 --package "system-images;android-36;default;x86_64" --device pixel_2
-          emulator -avd vanta-perf-api36 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-save > "$RUNNER_TEMP/vanta-perf-emulator.log" 2>&1 &
-          adb wait-for-device
-          for attempt in $(seq 1 90); do
-            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then break; fi
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/vanta-perf-metadata"
+          exec > >(tee -a "$RUNNER_TEMP/vanta-perf-metadata/emulator-boot-step.log") 2>&1
+          timeout 15s adb version
+          command -v emulator
+          timeout 15s emulator -version
+          printf 'no\n' | timeout 180s avdmanager create avd --force --name vanta-perf-api36 --package "system-images;android-36;default;x86_64" --device pixel_2
+          emulator -avd vanta-perf-api36 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-save -accel auto > "$RUNNER_TEMP/vanta-perf-emulator.log" 2>&1 &
+          emulator_pid=$!
+          echo "emulator_pid=$emulator_pid"
+          if ! timeout 120s adb wait-for-device; then
+            echo "adb wait-for-device timed out or failed"
+            tail -n 200 "$RUNNER_TEMP/vanta-perf-emulator.log" || true
+            exit 1
+          fi
+          booted=false
+          for attempt in $(seq 1 60); do
+            boot_state="$(timeout 5s adb shell getprop sys.boot_completed 2>&1 | tr -d '\r' || true)"
+            echo "boot_check=$attempt sys.boot_completed=$boot_state"
+            if [ "$boot_state" = "1" ]; then booted=true; break; fi
+            if ! kill -0 "$emulator_pid" 2>/dev/null; then
+              echo "emulator process exited before boot completed"
+              tail -n 200 "$RUNNER_TEMP/vanta-perf-emulator.log" || true
+              exit 1
+            fi
             sleep 2
           done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-          mkdir -p "$RUNNER_TEMP/vanta-perf-metadata"
+          if [ "$booted" != "true" ]; then
+            echo "Android system did not report boot completed before 60 bounded checks"
+            tail -n 200 "$RUNNER_TEMP/vanta-perf-emulator.log" || true
+            exit 1
+          fi
+          timeout 15s adb shell settings put global window_animation_scale 0
+          timeout 15s adb shell settings put global transition_animation_scale 0
+          timeout 15s adb shell settings put global animator_duration_scale 0
           {
-            adb shell getprop ro.build.fingerprint
-            adb shell getprop ro.build.version.release
-            adb shell getprop ro.build.version.sdk
-            adb shell getprop ro.product.model
-            adb shell getprop ro.product.cpu.abi
-            adb shell settings get system font_scale
+            timeout 15s adb shell getprop ro.build.fingerprint
+            timeout 15s adb shell getprop ro.build.version.release
+            timeout 15s adb shell getprop ro.build.version.sdk
+            timeout 15s adb shell getprop ro.product.model
+            timeout 15s adb shell getprop ro.product.cpu.abi
+            timeout 15s adb shell settings get system font_scale
           } > "$RUNNER_TEMP/vanta-perf-metadata/device.txt"
 
       - name: List benchmark and profile tasks
-        working-directory: android
-        run: bash ./gradlew --no-daemon :app:tasks --all :benchmark:tasks --all | tee "$RUNNER_TEMP/vanta-perf-metadata/gradle-tasks.txt"
-
-      - name: Generate release-like Baseline Profile
-        working-directory: android
-        run: bash ./gradlew --no-daemon :app:generateBenchmarkBaselineProfile
-
-      - name: Assemble release-like profileable target
+        timeout-minutes: 15
         working-directory: android
         run: |
-          bash ./gradlew --no-daemon :app:assembleBenchmark
+          set -o pipefail
+          timeout 14m bash ./gradlew --no-daemon :app:tasks --all :benchmark:tasks --all | tee "$RUNNER_TEMP/vanta-perf-metadata/gradle-tasks.txt"
+
+      - name: Generate release-like Baseline Profile
+        timeout-minutes: 20
+        working-directory: android
+        run: timeout 19m bash ./gradlew --no-daemon :app:generateBenchmarkBaselineProfile
+
+      - name: Assemble release-like profileable target
+        timeout-minutes: 20
+        working-directory: android
+        run: |
+          timeout 19m bash ./gradlew --no-daemon :app:assembleBenchmark
           apk=app/build/outputs/apk/benchmark/app-benchmark.apk
           test -f "$apk"
           unzip -Z1 "$apk" | tee "$RUNNER_TEMP/vanta-perf-metadata/benchmark-apk-entries.txt"
           unzip -Z1 "$apk" | grep -E '^assets/dexopt/baseline\.prof(m)?$'
 
       - name: Run startup, screen-frame, and required-profile Macrobenchmarks
+        timeout-minutes: 35
         working-directory: android
-        run: bash ./gradlew --no-daemon :benchmark:connectedCheck
+        run: timeout 34m bash ./gradlew --no-daemon :benchmark:connectedCheck
 
       - name: Upload benchmark and profile evidence
         if: always()
