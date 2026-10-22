@@ -1,6 +1,5 @@
 package dev.system.app.data
 
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -289,12 +288,13 @@ class OfflineUpdateOfflineUiTest {
             dao.pendingMutations(userId).single { it.operationType == "update_task" }
         }
         assertTrue(pending.retryCount >= 1)
-        assertTrue(pending.nextAttemptAt >= pending.lastAttemptAt + 30_000L)
-        assertTrue(pending.nextAttemptAt > beforeAttempt)
+        val nextAttemptAt = requireNotNull(pending.nextAttemptAt)
+        assertTrue(nextAttemptAt >= pending.lastAttemptAt + 30_000L)
+        assertTrue(nextAttemptAt > beforeAttempt)
         OfflineE2ESupport.saveState(
             state.put("updateOperationId", pending.operationId)
                 .put("retryCountAfterOfflineAttempt", pending.retryCount)
-                .put("nextAttemptAtAfterOfflineAttempt", pending.nextAttemptAt)
+                .put("nextAttemptAtAfterOfflineAttempt", nextAttemptAt)
         )
     }
 }
@@ -516,6 +516,6 @@ class OfflineUpdateConvergenceUiTest {
         composeRule.waitUntil(20_000) {
             composeRule.onAllNodesWithText(editedTitle).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText(editedTitle).assertExists()
+        composeRule.onNodeWithText(editedTitle).assertIsDisplayed()
     }
 }
