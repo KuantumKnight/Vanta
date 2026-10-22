@@ -14,7 +14,7 @@ The pre-Batch 5 baseline is the integrated Batch 3/4 source, reviewed in docs/VA
 - Upcoming/search observed the full pending occurrence list for the owner without a SQL limit.
 - Macrobenchmark and Baseline Profile source existed, but no measurements had run.
 
-There is no numeric before measurement. The local verification attempt of `:app:compileDebugKotlin --no-daemon --stacktrace` failed in Windows Java selector/loopback initialization with `java.io.IOException: Unable to establish loopback connection`, before Gradle project configuration; no local Kotlin compilation occurred. Hosted Android release CI passed on checkpoint `39714036235`; final post-editor CI is tracked in [VANTA2_BATCH5_REPORT.md](VANTA2_BATCH5_REPORT.md). `adb devices -l` is empty, so local screenshot and benchmark tasks did not run.
+There is no numeric before measurement. The local verification attempt of `:app:compileDebugKotlin --no-daemon --stacktrace` failed in Windows Java selector/loopback initialization with `java.io.IOException: Unable to establish loopback connection`, before Gradle project configuration; no local Kotlin compilation occurred. The final hosted Android release gate, including Task Detail/Edit and managed-device tests, passed in [run 39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499). `adb devices -l` is empty, so local screenshot and benchmark tasks did not run.
 
 ## Changes reviewed
 
@@ -106,10 +106,9 @@ Not verified on device:
 
 ## Remaining risks and next checks
 
-1. Record final post-editor Android release CI and instrumentation results in the Batch 5 report.
-2. Run cold/warm startup and frame-timing Macrobenchmarks on a representative physical device and compare distributions to the Batch 3/4 baseline.
-3. Generate and archive the Baseline Profile from a signed-in seeded test account; add controlled Task Detail/Edit and completion journeys only with disposable fixture data.
-4. Test light/dark contrast, TalkBack, font scale, compact phone, expanded width, and landscape on device.
-5. Revisit pending-list paging and root state isolation only if measured account sizes/recomposition profiles show a need.
+1. Run cold/warm startup and frame-timing Macrobenchmarks on a representative physical device and compare distributions to the Batch 3/4 baseline.
+2. Generate and archive the Baseline Profile from a signed-in seeded test account; add controlled Task Detail/Edit and completion journeys only with disposable fixture data.
+3. Test light/dark contrast, TalkBack, font scale, compact phone, expanded width, and landscape on device.
+4. Revisit pending-list paging and root state isolation only if measured account sizes/recomposition profiles show a need.
 
 No numeric performance target is reported as achieved by this review.

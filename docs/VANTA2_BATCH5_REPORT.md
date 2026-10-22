@@ -10,7 +10,7 @@ The task editor queues its sparse typed patch and optimistic Room image in one t
 
 ## Implementation
 
-**PARTIAL** — the requested product work is implemented and hosted CI is the acceptance gate for Android compilation and instrumentation. Source and automated test coverage do not replace visual review, device accessibility checks, or performance measurements; those remain unavailable.
+**PARTIAL** — the requested product work is implemented and the complete hosted release gate is green. The remaining evidence gap is the device-level visual/accessibility review and performance measurement; source and automated test coverage do not replace those checks.
 
 The shared design system adds semantic colors, typography, spacing, shapes, elevation, icons, layout, timeline, and motion tokens plus reusable card, section-header, chip, and empty-state components. Navigation uses Today, Week, and Habits as primary destinations, with Upcoming, Goals, Analytics, Review, and Settings in More. Existing planning, calendar, AI proposal, offline completion, notification scheduling, widget completion, and focus flows were preserved by source review.
 
@@ -30,27 +30,27 @@ The existing server RPC validates `auth.uid()` ownership, limits the scheduling 
 
 ## Android CI
 
-**PASS** — hosted release gate run `39714036235` passed on the checkpoint commit after correcting two Kotlin imports found by the first hosted attempt. The checkpoint run preceded Task Detail/Edit. Final Batch 5 Android and hosted checks for the task update are recorded after the final CI run below.
+**PASS** — the final hosted release gate run [39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499) passed on commit `5c787482691029b639565e15b241529d2286de0b`, including Task Detail/Edit and the managed-device suite. An earlier instrumentation run exposed a test assertion that expected an off-screen field to be visible; the test now scrolls that field into view, and the final run passed.
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Gradle configuration | **PASS** | Hosted Android release gate `39714036235` |
-| Android JVM tests | **PASS** | Hosted Android release gate `39714036235` |
-| Lint | **PASS** | Hosted Android release gate `39714036235` |
-| Debug/release APKs | **PASS** | Hosted Android release gate `39714036235` |
-| Android test APK | **PASS** | Hosted Android release gate `39714036235` |
-| Managed-device instrumentation and Room migration tests | **PASS** | Hosted Android release gate `39714036235`; this run tested the pre-editor checkpoint |
-| Deno shared tests | **PASS** | 34 passed, 0 failed |
-| Deno Edge Function checks | **PASS** | `mcp`, `expand-schedules`, `sync-push`, `send-reminders` |
-| Consent lint/build | **PASS** | `web/consent`: `npm run lint` and `npm run build` |
+| Gradle configuration | **PASS** | Final hosted release gate [39719944499](https://github.com/KuantumKnight/Vanta/actions/runs/39719944499) |
+| Android JVM tests | **PASS** | Final hosted release gate `39719944499` |
+| Lint | **PASS** | Final hosted release gate `39719944499` |
+| Debug/release APKs | **PASS** | Final hosted release gate `39719944499` |
+| Android test APK | **PASS** | Final hosted release gate `39719944499` |
+| Managed-device instrumentation and Room migration tests | **PASS** | Final hosted release gate `39719944499` |
+| Deno shared tests | **PASS** | Final hosted release gate `39719944499`; 6 passed, 0 failed |
+| Deno Edge Function checks | **PASS** | Final hosted release gate `39719944499`; `mcp`, `expand-schedules`, `sync-push`, `send-reminders` |
+| Consent lint/build | **PASS** | Final hosted release gate `39719944499`; `web/consent` lint and build |
 
-**Final post-editor CI run:** pending.
+The release gate covers the app source commit above. The follow-up documentation-only commit does not alter that tested source tree.
 
 The local Windows Gradle wrapper still fails before project configuration with `Unable to establish loopback connection`; hosted Linux CI is the Android build/test evidence.
 
 ## Instrumentation
 
-**PASS** — hosted managed-device instrumentation and Room migration tests passed in the pre-editor checkpoint run `39714036235`. Added Task Detail/Edit, large-font scroll, DAO update-queue, and Room v8→v9 migration tests are included in the final hosted gate; final post-editor status is pending.
+**PASS** — all 57 hosted managed-device tests passed in final run `39719944499` (0 failures, 0 errors, 0 skipped). This includes Task Detail/Edit, large-font scrolling, update-queue durability/reconciliation, and Room v8→v9 migration coverage.
 
 No Android device is attached locally. No screenshot matrix or interactive manual device session was completed.
 
@@ -64,11 +64,11 @@ No Android device is attached locally. No screenshot matrix or interactive manua
 
 ## Security and Secret Scan
 
-The editor uses the existing authenticated owner-checked RPC; it does not add a direct table write or unrestricted JSON mutation. No Supabase database or policy files were changed. The final secret-scan command and result will be recorded after scanning the completed diff.
+The editor uses the existing authenticated owner-checked RPC; it does not add a direct table write or unrestricted JSON mutation. No Supabase database or policy files were changed. Gitleaks v8.30.1 scanned the Batch 5 commit range and final staged documentation diff with `--redact`; both found no committed or staged secrets. A broad workspace scan reported matches only in ignored or untracked local configuration and generated cache files, outside the pushed change set.
 
 ## Known Limitations
 
-1. Device screenshots and manual visual review were unavailable; there is no attached emulator/device.
+1. Device screenshots and manual visual review were unavailable; no local interactive emulator/device session was available.
 2. Performance and Baseline Profile results are **NOT MEASURED**.
 3. Accessibility remains **PARTIAL** pending TalkBack, contrast, keyboard, touch-target, and motion review on device.
 4. Update-specific Supabase transport replay and retry are not exercised end-to-end because the repository client is not injectable; Room durability, payload mapping, delta shielding, and canonical reconciliation are covered.
@@ -78,18 +78,18 @@ The editor uses the existing authenticated owner-checked RPC; it does not add a 
 
 ## Recommended Next Step
 
-Complete the final hosted release gate on the task-update commit and record its run. Then capture the screenshot matrix and perform TalkBack, contrast, reduced-motion, and macrobenchmark checks on a seeded Android device. Do not begin Batch 6 until the final CI evidence is recorded and these remaining Batch 5 checks are either completed or explicitly accepted as unavailable.
+Capture the screenshot matrix and perform TalkBack, contrast, reduced-motion, and macrobenchmark checks on a seeded Android device. Keep Batch 6 deferred until these remaining Batch 5 checks are completed or explicitly accepted as unavailable.
 
 ## Final Status
 
 ```text
-Implementation: PARTIAL
-Android CI: PASS (checkpoint run 39714036235; final post-editor run pending)
-Instrumentation: PASS (checkpoint run 39714036235; final post-editor run pending)
-Task Detail/Edit: PASS by source and added automated coverage; final hosted test result pending
+Implementation: PARTIAL (manual visual/accessibility evidence and performance measurements remain unavailable)
+Android CI: PASS (run 39719944499 on source commit 5c787482691029b639565e15b241529d2286de0b)
+Instrumentation: PASS (run 39719944499, including Room migrations and Task Detail/Edit coverage)
+Task Detail/Edit: PASS (hosted build and instrumentation passed)
 Offline Task Editing: PASS for Room queue, restart, delta protection, payload and reconciliation; RPC transport replay is not integration-tested
 Performance: NOT MEASURED
 Accessibility: PARTIAL
-Worktree: final status pending
+Worktree: clean after final report commit
 Batch 6: not started
 ```
