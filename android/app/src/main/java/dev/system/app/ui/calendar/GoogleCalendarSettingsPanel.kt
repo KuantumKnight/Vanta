@@ -13,12 +13,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import dev.system.app.calendar.CalendarCatalogEntity
 import dev.system.app.calendar.CalendarSyncStatus
+import dev.system.app.ui.theme.VantaSpacing
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /** Settings surface to embed in the existing account/preferences destination. */
 @Composable
@@ -27,7 +26,7 @@ fun GoogleCalendarSettingsPanel(
     calendars: List<CalendarCatalogEntity>,
     isRefreshing: Boolean,
     now: Instant = Instant.now(),
-    zoneId: ZoneId = ZoneId.systemDefault(),
+    @Suppress("UNUSED_PARAMETER") zoneId: ZoneId = ZoneId.systemDefault(),
     onConnect: () -> Unit,
     onRefresh: () -> Unit,
     onDisconnect: () -> Unit,
@@ -35,7 +34,10 @@ fun GoogleCalendarSettingsPanel(
     modifier: Modifier = Modifier,
 ) {
     val stale = status.isStale(now.toEpochMilli())
-    Column(modifier = modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = modifier.fillMaxWidth().padding(vertical = VantaSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(VantaSpacing.xs),
+    ) {
         Text("Google Calendar", style = MaterialTheme.typography.titleMedium)
         when {
             !status.connected && status.lastSuccessAt != null ->
@@ -49,7 +51,7 @@ fun GoogleCalendarSettingsPanel(
             stale ->
                 Text("Calendar is connected. Its event cache needs a refresh.")
             else ->
-                Text("Calendar is connected${status.lastSuccessAt?.let { " · updated ${formatSyncTime(it, zoneId)}" }.orEmpty()}.")
+                Text("Calendar is connected.")
         }
 
         if (status.connected) {
@@ -75,7 +77,7 @@ fun GoogleCalendarSettingsPanel(
                     }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(VantaSpacing.xs)) {
                 OutlinedButton(onClick = onRefresh, enabled = !isRefreshing) {
                     Text(if (isRefreshing) "Refreshing…" else "Refresh")
                 }
@@ -94,6 +96,3 @@ fun GoogleCalendarSettingsPanel(
         )
     }
 }
-
-private fun formatSyncTime(epochMillis: Long, zoneId: ZoneId): String =
-    DateTimeFormatter.ofPattern("MMM d, HH:mm").format(Instant.ofEpochMilli(epochMillis).atZone(zoneId))

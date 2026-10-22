@@ -2,9 +2,7 @@ package dev.system.app.ui.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
@@ -44,6 +42,7 @@ internal fun NotificationPermissionCard(openSettings: Boolean, onEnable: () -> U
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 internal fun SyncSummary(syncing: Boolean, error: String?, lastSyncedAt: String?, onRetry: () -> Unit) {
     when {
         error != null -> Card(
@@ -68,13 +67,7 @@ internal fun SyncSummary(syncing: Boolean, error: String?, lastSyncedAt: String?
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
             Text("  Syncing your tasks…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        lastSyncedAt != null -> Text(
-            "Updated " + formatClock(lastSyncedAt),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-        else -> Spacer(Modifier.height(4.dp))
+        else -> Unit
     }
 }
 

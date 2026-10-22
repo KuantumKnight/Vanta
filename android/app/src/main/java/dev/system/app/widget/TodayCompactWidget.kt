@@ -2,10 +2,8 @@ package dev.system.app.widget
 
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalSize
@@ -32,6 +30,8 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.Button
 import dev.system.app.MainActivity
+import dev.system.app.ui.theme.VantaSpacing
+import dev.system.app.ui.theme.VantaTypeSize
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -49,7 +49,7 @@ class TodayCompactWidget : GlanceAppWidget() {
         val state = persisted?.takeIf { it.localDate == today.toString() }
         if (state == null) VantaWidgetRefresh.requestRefresh(context)
 
-        val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val dark = widgetIsDark(context)
         val colors = WidgetColors(dark)
         val openApp = actionStartActivity(Intent(context, MainActivity::class.java))
         val quickAdd = actionStartActivity(quickAddIntent(context, WidgetIntentContract.SOURCE_TODAY_COMPACT))
@@ -72,39 +72,39 @@ private fun TodayCompactContent(
     Column(
         modifier = GlanceModifier.fillMaxSize()
             .background(colors.background)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = VantaSpacing.md, vertical = VantaSpacing.sm),
     ) {
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = GlanceModifier.defaultWeight().clickable(openApp)) {
-                Text("TODAY  ·  ${today.format(DateTimeFormatter.ofPattern("EEE d"))}", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = colors.accent))
+                Text("Today · ${today.format(DateTimeFormatter.ofPattern("EEE d"))}", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = VantaTypeSize.metadata, color = colors.accent))
                 if (state != null) {
-                    Text("${state.totalCount} tasks · ${formatPlanned(state.plannedMinutes)} planned", style = TextStyle(fontSize = 10.sp, color = colors.muted))
+                    Text("${state.totalCount} tasks · ${formatPlanned(state.plannedMinutes)} planned", style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted))
                 }
             }
-            Text("＋", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp, color = colors.accent), modifier = GlanceModifier.clickable(quickAdd))
+            Button(text = "Add", onClick = quickAdd)
         }
 
         Spacer(GlanceModifier.height(4.dp))
         when {
-            state == null -> Text("Updating your plan…", style = TextStyle(fontSize = 12.sp, color = colors.muted))
-            state.todayItems.isEmpty() -> Text("Nothing scheduled today", style = TextStyle(fontSize = 12.sp, color = colors.muted), modifier = GlanceModifier.clickable(openApp))
+            state == null -> Text("Updating your plan…", style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted))
+            state.todayItems.isEmpty() -> Text("Nothing scheduled today", style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted), modifier = GlanceModifier.clickable(openApp))
             else -> {
                 val maxRows = when (sizeClass) {
-                    WidgetSizeClass.COMPACT -> 2
-                    WidgetSizeClass.MEDIUM -> 4
-                    WidgetSizeClass.EXPANDED -> 7
+                    WidgetSizeClass.COMPACT -> 1
+                    WidgetSizeClass.MEDIUM -> 3
+                    WidgetSizeClass.EXPANDED -> 5
                 }
                 val visible = state.todayItems.take(maxRows)
                 visible.forEach { item -> TodayItemRow(item, colors, openApp) }
                 val remaining = (state.totalCount - visible.size).coerceAtLeast(0)
                 if (remaining > 0) {
-                    Text("+$remaining more", style = TextStyle(fontSize = 10.sp, color = colors.muted), modifier = GlanceModifier.padding(top = 2.dp).clickable(openApp))
+                    Text("+$remaining more", style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted), modifier = GlanceModifier.padding(top = 2.dp).clickable(openApp))
                 }
             }
         }
 
         if (state?.syncWarning == true) {
-            Text("Saved offline · sync will retry", style = TextStyle(fontSize = 10.sp, color = colors.muted), modifier = GlanceModifier.padding(top = 2.dp))
+            Text("Saved offline · sync will retry", style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted), modifier = GlanceModifier.padding(top = 2.dp))
         }
     }
 }
@@ -115,11 +115,11 @@ private fun TodayItemRow(item: WidgetDayItem, colors: WidgetColors, openApp: Act
         modifier = GlanceModifier.fillMaxWidth().padding(vertical = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val startLabel = if (item.allDay) "ALL DAY" else item.start?.let(::clockLabel) ?: "ANYTIME"
-        Text(startLabel, style = TextStyle(fontSize = 10.sp, color = colors.muted), modifier = GlanceModifier.padding(end = 7.dp))
-        Text(item.title, style = TextStyle(fontSize = 12.sp, color = if (item.completed) colors.muted else colors.foreground), maxLines = 1, modifier = GlanceModifier.defaultWeight().clickable(openApp))
+        val startLabel = if (item.allDay) "All day" else item.start?.let(::clockLabel) ?: "Any time"
+        Text(startLabel, style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted), modifier = GlanceModifier.padding(end = 7.dp))
+        Text(item.title, style = TextStyle(fontSize = VantaTypeSize.caption, color = if (item.completed) colors.muted else colors.foreground), maxLines = 1, modifier = GlanceModifier.defaultWeight().clickable(openApp))
         if (item.completed) {
-            Text("✓", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 13.sp, color = colors.accent))
+            Text("Done", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = VantaTypeSize.caption, color = colors.accent))
         } else {
             Button(
                 text = "Done",

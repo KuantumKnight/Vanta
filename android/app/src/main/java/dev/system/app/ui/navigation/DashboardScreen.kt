@@ -1,13 +1,22 @@
 package dev.system.app.ui.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.AlertDialog
@@ -17,8 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -31,12 +39,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.system.app.data.CachedOccurrence
 import dev.system.app.data.GoalProgress
@@ -74,6 +87,10 @@ import dev.system.app.ui.components.NotificationPermissionCard
 import dev.system.app.ui.components.SyncSummary
 import dev.system.app.ui.components.TaskTimeZone
 import dev.system.app.ui.components.taskDate
+import dev.system.app.ui.theme.VantaCorner
+import dev.system.app.ui.theme.VantaElevation
+import dev.system.app.ui.theme.VantaIconSize
+import dev.system.app.ui.theme.VantaSpacing
 import dev.system.app.ui.goals.GoalsScreen
 import dev.system.app.ui.quickcapture.QuickCaptureLaunchRequest
 import dev.system.app.ui.quickcapture.QuickCaptureSubmission
@@ -108,10 +125,14 @@ internal fun DashboardTopBar(
             }
         },
         actions = {
-            TextButton(enabled = !syncing, onClick = onSync) { Text(if (syncing) "Syncing…" else "Sync") }
             Box {
                 TextButton(onClick = { menuExpanded = true }) { Text("Account") }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text(if (syncing) "Syncing…" else "Sync now") },
+                        enabled = !syncing,
+                        onClick = { menuExpanded = false; onSync() },
+                    )
                     DropdownMenuItem(
                         text = { Text("Sign out") },
                         onClick = { menuExpanded = false; onSignOut() },
@@ -229,20 +250,10 @@ internal fun DashboardScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-        ScrollableTabRow(selectedTabIndex = selectedTab.ordinal) {
-            DashboardTab.values().forEach { tab ->
-                Tab(
-                    selected = selectedTab == tab,
-                    onClick = { onTabSelected(tab) },
-                    text = { Text(tab.label) },
-                )
-            }
-        }
-
         if (selectedTab in setOf(DashboardTab.Today, DashboardTab.Upcoming, DashboardTab.Goals)) OutlinedTextField(
             value = search,
             onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = VantaSpacing.lg, vertical = VantaSpacing.xs),
             label = { Text(if (selectedTab == DashboardTab.Goals) "Search goals" else "Search tasks") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -286,7 +297,7 @@ internal fun DashboardScreen(
                         unscheduledRows = unscheduledRows,
                         today = today,
                         emptyTitle = if (search.isBlank()) "Nothing due today" else "No matching tasks",
-                        emptyBody = if (search.isBlank()) "Add a task in ChatGPT and it will show up here." else "Try a different word.",
+                        emptyBody = if (search.isBlank()) "Add a task to start shaping your day." else "Try a different word.",
                         onComplete = onComplete,
                         onReschedule = onReschedule,
                         onStartFocus = onStartFocus,
@@ -469,7 +480,21 @@ internal fun DashboardScreen(
                 }
             }
             DashboardTab.Analytics -> {
-                analyticsSummary?.let { summary ->
+                if (analyticsSummary == null) {
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            "Preparing your activity",
+                            modifier = Modifier.padding(top = VantaSpacing.md),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else analyticsSummary?.let { summary ->
                     AnalyticsScreen(
                         summary = summary,
                         onPeriodSelected = onAnalyticsPeriodSelected,
@@ -506,6 +531,11 @@ internal fun DashboardScreen(
                 )
             }
         }
+
+        DashboardNavigationBar(
+            selectedTab = selectedTab,
+            onTabSelected = onTabSelected,
+        )
         }
 
         if (selectedTab in setOf(DashboardTab.Today, DashboardTab.Week, DashboardTab.Upcoming, DashboardTab.Goals)) {
@@ -515,7 +545,7 @@ internal fun DashboardScreen(
                     quickCaptureSource = null
                     quickCaptureOpen = true
                 },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = VantaSpacing.lg, bottom = 76.dp)
                     .semantics { contentDescription = "Create a task" },
                 shape = CircleShape,
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -583,5 +613,96 @@ internal fun DashboardScreen(
             },
             confirmButton = { TextButton(onClick = { inspectedWeekBlock = null }) { Text("Close") } },
         )
+    }
+}
+
+@Composable
+private fun DashboardNavigationBar(
+    selectedTab: DashboardTab,
+    onTabSelected: (DashboardTab) -> Unit,
+) {
+    var moreExpanded by remember { mutableStateOf(false) }
+    val primaryTabs = listOf(DashboardTab.Today, DashboardTab.Week, DashboardTab.Habits)
+    val moreTabs = listOf(
+        DashboardTab.Upcoming,
+        DashboardTab.Goals,
+        DashboardTab.Analytics,
+        DashboardTab.EveningReview,
+        DashboardTab.Settings,
+    )
+    val selectedInMore = selectedTab in moreTabs
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = VantaElevation.flat,
+        shadowElevation = VantaElevation.flat,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .padding(horizontal = VantaSpacing.xs, vertical = VantaSpacing.xxs)
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(VantaSpacing.xxs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            primaryTabs.forEach { tab ->
+                val selected = selectedTab == tab
+                Text(
+                    text = tab.label,
+                    modifier = Modifier.weight(1f)
+                        .heightIn(min = VantaIconSize.touchTarget)
+                        .clip(RoundedCornerShape(VantaCorner.control))
+                        .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else Color.Transparent)
+                        .selectable(selected = selected, role = Role.Tab) { onTabSelected(tab) }
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .padding(horizontal = VantaSpacing.xxs)
+                        .semantics {
+                            contentDescription = tab.label
+                            this.selected = selected
+                        },
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "More",
+                    modifier = Modifier.fillMaxWidth()
+                        .heightIn(min = VantaIconSize.touchTarget)
+                        .clip(RoundedCornerShape(VantaCorner.control))
+                        .background(if (selectedInMore) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else Color.Transparent)
+                        .selectable(selected = selectedInMore, role = Role.Tab) { moreExpanded = true }
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .padding(horizontal = VantaSpacing.xxs)
+                        .semantics {
+                            contentDescription = "More destinations"
+                            selected = selectedInMore
+                        },
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selectedInMore) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (selectedInMore) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+                DropdownMenu(
+                    expanded = moreExpanded,
+                    onDismissRequest = { moreExpanded = false },
+                ) {
+                    moreTabs.forEach { tab ->
+                        DropdownMenuItem(
+                            text = { Text(tab.label) },
+                            modifier = Modifier.semantics { selected = selectedTab == tab },
+                            onClick = {
+                                moreExpanded = false
+                                onTabSelected(tab)
+                            },
+                        )
+                    }
+                }
+            }
+        }
     }
 }

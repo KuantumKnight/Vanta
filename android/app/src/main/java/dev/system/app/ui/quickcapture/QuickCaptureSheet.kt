@@ -3,14 +3,17 @@ package dev.system.app.ui.quickcapture
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -41,8 +44,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.system.app.ui.components.TaskTimeZone
+import dev.system.app.ui.components.VantaSectionHeader
 import dev.system.app.planner.SchedulePriority
 import dev.system.app.planner.ScheduleType
+import dev.system.app.ui.theme.VantaIconSize
+import dev.system.app.ui.theme.VantaLayout
+import dev.system.app.ui.theme.VantaSpacing
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -169,104 +176,111 @@ internal fun QuickCaptureSheet(
     )
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier.fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+        Box(
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding(),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            Text("Quick Capture", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            if (!source.isNullOrBlank()) {
-                Text(
-                    if (source.contains("widget")) "Add to your day from Vanta" else "Capture a task quickly",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it; phraseMessage = null },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Title or quick phrase") },
-                placeholder = { Text("Study OS tomorrow 6 PM for 90 min") },
-                supportingText = { Text("Use Parse for clear dates, times, and durations.") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(
-                    onClick = {
-                        val parsed = parseQuickCapturePhrase(title, initialDate)
-                        if (parsed.recognizedSchedule) {
-                            title = parsed.title
-                            if (parsed.date != null) date = parsed.date
-                            if (parsed.startTime != null) startTime = parsed.startTime
-                            if (parsed.durationMinutes != null) durationText = parsed.durationMinutes.toString()
-                            scheduleEnabled = parsed.date != null || parsed.startTime != null
-                            phraseMessage = buildString {
-                                append("Detected")
-                                parsed.date?.let { append(" · ${it.format(DATE_FORMATTER)}") }
-                                parsed.startTime?.let { append(" · ${it.format(TIME_FORMATTER)}") }
-                                parsed.durationMinutes?.let { append(" · ${it} min") }
-                                append(". Review the fields below.")
-                            }
-                        } else {
-                            phraseMessage = "No clear date, time, or duration found. Use the fields below."
-                        }
-                    },
-                ) { Text("Parse phrase") }
-            }
-            phraseMessage?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Notes · optional") },
-                minLines = 2,
-                maxLines = 4,
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
+                modifier = Modifier.widthIn(max = VantaLayout.formMaxWidth)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = VantaSpacing.md)
+                    .padding(bottom = VantaSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(VantaSpacing.sm),
             ) {
-                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                    Text("Schedule this task", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+                Text("Quick Capture", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                if (!source.isNullOrBlank()) {
                     Text(
-                        if (scheduleEnabled) "Choose a date and start time, or mark all day."
-                        else "This task will stay in your anytime list.",
+                        if (source.contains("widget")) "Add to your day from Vanta" else "Capture a task quickly",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(
-                    checked = scheduleEnabled,
-                    onCheckedChange = { enabled ->
-                        scheduleEnabled = enabled
-                        if (enabled && scheduleType == ScheduleType.FLEXIBLE) scheduleType = ScheduleType.SOFT
-                        if (!enabled) allDay = false
-                    },
-                    modifier = Modifier.semantics { contentDescription = "Schedule this task" },
-                )
-            }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                VantaSectionHeader("Details")
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it; phraseMessage = null },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Title or quick phrase") },
+                    placeholder = { Text("Study OS tomorrow 6 PM for 90 min") },
+                    supportingText = { Text("Understands dates, times, and durations.") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(
+                        onClick = {
+                            val parsed = parseQuickCapturePhrase(title, initialDate)
+                            if (parsed.recognizedSchedule) {
+                                title = parsed.title
+                                if (parsed.date != null) date = parsed.date
+                                if (parsed.startTime != null) startTime = parsed.startTime
+                                if (parsed.durationMinutes != null) durationText = parsed.durationMinutes.toString()
+                                scheduleEnabled = parsed.date != null || parsed.startTime != null
+                                phraseMessage = buildString {
+                                    append("Detected")
+                                    parsed.date?.let { append(" · ${it.format(DATE_FORMATTER)}") }
+                                    parsed.startTime?.let { append(" · ${it.format(TIME_FORMATTER)}") }
+                                    parsed.durationMinutes?.let { append(" · ${it} min") }
+                                    append(". Review the fields below.")
+                                }
+                            } else {
+                                phraseMessage = "No clear date, time, or duration found. Use the fields below."
+                            }
+                        },
+                    ) { Text("Parse phrase") }
+                }
+                phraseMessage?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Notes · optional") },
+                    minLines = 2,
+                    maxLines = 4,
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text("Schedule this task", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+                        Text(
+                            if (scheduleEnabled) "Choose a date and start time, or mark all day."
+                            else "This task will stay in your anytime list.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = scheduleEnabled,
+                        onCheckedChange = { enabled ->
+                            scheduleEnabled = enabled
+                            if (enabled && scheduleType == ScheduleType.FLEXIBLE) scheduleType = ScheduleType.SOFT
+                            if (!enabled) allDay = false
+                        },
+                        modifier = Modifier.semantics { contentDescription = "Schedule this task" },
+                    )
+                }
+
+                VantaSectionHeader("Timing")
                 Column {
-                    OutlinedButton(onClick = { scheduleTypeMenu = true }) {
-                        Text("${if (scheduleEnabled) scheduleType else ScheduleType.FLEXIBLE} · Type")
+                    OutlinedButton(
+                        onClick = { scheduleTypeMenu = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (scheduleEnabled) "Schedule type · ${scheduleType.displayLabel()}" else "Anytime")
                     }
                     DropdownMenu(expanded = scheduleTypeMenu, onDismissRequest = { scheduleTypeMenu = false }) {
                         (if (scheduleEnabled) listOf(ScheduleType.HARD, ScheduleType.SOFT) else listOf(ScheduleType.FLEXIBLE))
                             .forEach { type ->
-                                DropdownMenuItem(text = { Text(type.name) }, onClick = {
+                                DropdownMenuItem(text = { Text(type.displayLabel()) }, onClick = {
                                     scheduleType = type
                                     scheduleTypeMenu = false
                                     if (type != ScheduleType.HARD && allDay) allDay = false
@@ -275,40 +289,47 @@ internal fun QuickCaptureSheet(
                     }
                 }
                 Column {
-                    OutlinedButton(onClick = { priorityMenu = true }) { Text("${priority.name} · Priority") }
+                    OutlinedButton(
+                        onClick = { priorityMenu = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Priority · ${priority.displayLabel()}") }
                     DropdownMenu(expanded = priorityMenu, onDismissRequest = { priorityMenu = false }) {
                         SchedulePriority.values().forEach { selected ->
-                            DropdownMenuItem(text = { Text(selected.name) }, onClick = {
+                            DropdownMenuItem(text = { Text(selected.displayLabel()) }, onClick = {
                                 priority = selected
                                 priorityMenu = false
                             })
                         }
                     }
                 }
-            }
 
-            OutlinedButton(
-                onClick = {
-                    val currentDate = deadlineAt?.atZone(TaskTimeZone)?.toLocalDate() ?: initialDate
-                    val currentTime = deadlineAt?.atZone(TaskTimeZone)?.toLocalTime() ?: LocalTime.of(20, 0)
-                    DatePickerDialog(
-                        context,
-                        { _, year, month, day ->
-                            val selectedDate = LocalDate.of(year, month + 1, day)
-                            TimePickerDialog(context, { _, hour, minute ->
-                                deadlineAt = selectedDate.atTime(hour, minute).atZone(TaskTimeZone).toInstant()
-                            }, currentTime.hour, currentTime.minute, false).show()
-                        },
-                        currentDate.year,
-                        currentDate.monthValue - 1,
-                        currentDate.dayOfMonth,
-                    ).show()
-                },
-            ) { Text(deadlineAt?.let { "Deadline · ${it.atZone(TaskTimeZone).format(TIME_FORMATTER)} · ${it.atZone(TaskTimeZone).format(DATE_FORMATTER)}" } ?: "Add deadline · optional") }
-            if (deadlineAt != null) TextButton(onClick = { deadlineAt = null }) { Text("Clear deadline") }
+                OutlinedButton(
+                    onClick = {
+                        val currentDate = deadlineAt?.atZone(TaskTimeZone)?.toLocalDate() ?: initialDate
+                        val currentTime = deadlineAt?.atZone(TaskTimeZone)?.toLocalTime() ?: LocalTime.of(20, 0)
+                        DatePickerDialog(
+                            context,
+                            { _, year, month, day ->
+                                val selectedDate = LocalDate.of(year, month + 1, day)
+                                TimePickerDialog(context, { _, hour, minute ->
+                                    deadlineAt = selectedDate.atTime(hour, minute).atZone(TaskTimeZone).toInstant()
+                                }, currentTime.hour, currentTime.minute, false).show()
+                            },
+                            currentDate.year,
+                            currentDate.monthValue - 1,
+                            currentDate.dayOfMonth,
+                        ).show()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(deadlineAt?.let {
+                        "Deadline · ${it.atZone(TaskTimeZone).format(DATE_FORMATTER)} · ${it.atZone(TaskTimeZone).format(TIME_FORMATTER)}"
+                    } ?: "Add deadline · optional")
+                }
+                if (deadlineAt != null) TextButton(onClick = { deadlineAt = null }) { Text("Clear deadline") }
 
-            if (scheduleEnabled) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (scheduleEnabled) {
+                    VantaSectionHeader("Schedule")
                     OutlinedButton(
                         onClick = {
                             val current = date ?: initialDate
@@ -320,6 +341,7 @@ internal fun QuickCaptureSheet(
                                 current.dayOfMonth,
                             ).show()
                         },
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Date · ${date?.format(DATE_FORMATTER) ?: "Choose"}")
                     }
@@ -335,55 +357,68 @@ internal fun QuickCaptureSheet(
                                     false,
                                 ).show()
                             },
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("${startTime?.format(TIME_FORMATTER) ?: "Start time"}")
+                            Text(startTime?.format(TIME_FORMATTER) ?: "Choose a start time")
                         }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = allDay,
+                            onCheckedChange = {
+                                allDay = it
+                                if (it) startTime = null
+                            },
+                            modifier = Modifier.semantics { contentDescription = "All day" },
+                        )
+                        Text("All day", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = allDay,
-                        onCheckedChange = {
-                            allDay = it
-                            if (it) startTime = null
-                        },
-                        modifier = Modifier.semantics { contentDescription = "All day" },
-                    )
-                    Text("All day", style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    value = durationText,
+                    onValueChange = { value -> durationText = value.filter(Char::isDigit).take(5) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Duration · optional") },
+                    placeholder = { Text("Minutes") },
+                    supportingText = { Text("Leave blank when you do not want to set a duration.") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                )
+
+                val validationMessage = validation.error?.let(::validationMessage)
+                if (validationMessage != null) {
+                    Text(validationMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
-            }
 
-            OutlinedTextField(
-                value = durationText,
-                onValueChange = { value -> durationText = value.filter(Char::isDigit).take(5) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Duration · optional") },
-                placeholder = { Text("Minutes") },
-                supportingText = { Text("Leave blank when you do not want to set a duration.") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-            )
-
-            val validationMessage = validation.error?.let(::validationMessage)
-            if (validationMessage != null) {
-                Text(validationMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Button(
+                    onClick = {
+                        val submission = validation.submission ?: return@Button
+                        onCreateTask(submission)
+                        onDismiss()
+                    },
+                    enabled = validation.submission != null,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = VantaIconSize.touchTarget),
+                ) {
+                    Text("Save task")
+                }
+                Spacer(Modifier.height(VantaSpacing.xxs))
             }
-
-            Button(
-                onClick = {
-                    val submission = validation.submission ?: return@Button
-                    onCreateTask(submission)
-                    onDismiss()
-                },
-                enabled = validation.submission != null,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-            ) {
-                Text("Save task")
-            }
-            Spacer(Modifier.height(4.dp))
         }
     }
+}
+
+private fun ScheduleType.displayLabel(): String = when (this) {
+    ScheduleType.HARD -> "Fixed"
+    ScheduleType.SOFT -> "Planned"
+    ScheduleType.FLEXIBLE -> "Anytime"
+}
+
+private fun SchedulePriority.displayLabel(): String = when (this) {
+    SchedulePriority.LOW -> "Low"
+    SchedulePriority.NORMAL -> "Normal"
+    SchedulePriority.HIGH -> "High"
 }
 
 private fun validationMessage(error: QuickCaptureValidationError): String = when (error) {

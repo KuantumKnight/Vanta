@@ -203,9 +203,9 @@ class DashboardScreenTest {
 
         composeRule.onNodeWithText("Title or quick phrase").performTextInput("Holiday")
         composeRule.onNodeWithText("Duration · optional").performTextReplacement("")
-        composeRule.onNodeWithText("SOFT · Type").performClick()
-        composeRule.onNodeWithText("HARD").performClick()
-        composeRule.onNodeWithText("HARD · Type").assertIsDisplayed()
+        composeRule.onNodeWithText("Schedule type · Planned").performClick()
+        composeRule.onNodeWithText("Fixed").performClick()
+        composeRule.onNodeWithText("Schedule type · Fixed").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("All day").performClick()
         composeRule.onNodeWithContentDescription("All day").assertIsOn()
         composeRule.onNodeWithText("Save task").performScrollTo().assertIsEnabled().performClick()

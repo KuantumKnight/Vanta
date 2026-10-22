@@ -3,6 +3,7 @@ package dev.system.app.benchmark
 import androidx.benchmark.macro.BaselineProfileRule
 import androidx.benchmark.macro.CompilationMode
 import androidx.benchmark.macro.FrameTimingMetric
+import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.benchmark.macro.MacrobenchmarkRule
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
@@ -58,25 +59,16 @@ class VantaBenchmarkJourneys {
         setupBlock = { pressHome() },
     ) {
         startActivityAndWait()
-        if (device.wait(Until.hasObject(By.text("Today")), UI_WAIT_MS)) {
-            device.findObjects(By.text("Today")).firstOrNull()?.click()
-            device.waitForIdle()
-        }
+        navigateToDashboardDestination("Today")
 
         // A pre-authenticated profile account reaches the task list here. On a
         // fresh test install, the scroll gesture still exercises the sign-in
         // screen's scroll container without fabricating authentication state.
         scrollFirstVisibleContainer()
-        clickTabIfVisible("Upcoming")
-        clickTabIfVisible("Goals")
-        clickTabIfVisible("Today")
-    }
-
-    private fun androidx.benchmark.macro.MacrobenchmarkScope.clickTabIfVisible(label: String) {
-        if (device.wait(Until.hasObject(By.text(label)), UI_WAIT_MS)) {
-            device.findObjects(By.text(label)).firstOrNull()?.click()
-            device.waitForIdle()
+        listOf("Week", "Habits", "Upcoming", "Goals", "Today").forEach { label ->
+            navigateToDashboardDestination(label)
         }
+        openQuickCaptureIfAvailable()
     }
 
     private fun androidx.benchmark.macro.MacrobenchmarkScope.scrollFirstVisibleContainer() {
@@ -88,6 +80,51 @@ class VantaBenchmarkJourneys {
             container.fling(Direction.UP)
             device.waitForIdle()
         }
+    }
+}
+
+/**
+ * Reaches both primary destinations and items in the More menu. On fresh installs
+ * that remain on sign-in/loading, the Dashboard's Today tab is absent and the
+ * interaction is skipped rather than fabricating account state.
+ */
+private fun MacrobenchmarkScope.navigateToDashboardDestination(label: String) {
+    // More has a stable content description and only exists once Dashboard is
+    // composed. This avoids mistaking a page heading or task title for nav.
+    if (!device.wait(Until.hasObject(By.desc("More destinations")), UI_WAIT_MS)) return
+
+    if (label in setOf("Today", "Week", "Habits")) {
+        device.findObjects(By.text(label)).firstOrNull { it.isClickable }?.let { tab ->
+            tab.click()
+            device.waitForIdle()
+        }
+        return
+    }
+
+    val more = device.findObject(By.desc("More destinations")) ?: return
+    more.click()
+    if (device.wait(Until.hasObject(By.text(label)), UI_WAIT_MS)) {
+        device.findObjects(By.text(label)).firstOrNull { it.isClickable }?.let { item ->
+            item.click()
+            device.waitForIdle()
+        } ?: run {
+            device.pressBack()
+            device.waitForIdle()
+        }
+    } else {
+        device.pressBack()
+        device.waitForIdle()
+    }
+}
+
+/** Exercises the capture sheet without writing to an account or inventing task data. */
+private fun MacrobenchmarkScope.openQuickCaptureIfAvailable() {
+    val add = device.findObject(By.desc("Create a task")) ?: return
+    add.click()
+    if (device.wait(Until.hasObject(By.text("Quick Capture")), UI_WAIT_MS)) {
+        device.waitForIdle()
+        device.pressBack()
+        device.waitForIdle()
     }
 }
 
@@ -108,9 +145,8 @@ class VantaBaselineProfile {
             startActivityAndWait()
             device.waitForIdle()
 
-            if (device.wait(Until.hasObject(By.text("Today")), UI_WAIT_MS)) {
-                device.findObjects(By.text("Today")).firstOrNull()?.click()
-                device.waitForIdle()
+            if (device.wait(Until.hasObject(By.desc("More destinations")), UI_WAIT_MS)) {
+                navigateToDashboardDestination("Today")
                 device.findObjects(By.scrollable(true)).firstOrNull()?.let { list ->
                     list.setGestureMargin(device.displayWidth / 5)
                     list.fling(Direction.DOWN)
@@ -118,12 +154,10 @@ class VantaBaselineProfile {
                     list.fling(Direction.UP)
                     device.waitForIdle()
                 }
-                listOf("Upcoming", "Goals", "Today").forEach { label ->
-                    if (device.wait(Until.hasObject(By.text(label)), UI_WAIT_MS)) {
-                        device.findObjects(By.text(label)).firstOrNull()?.click()
-                        device.waitForIdle()
-                    }
+                listOf("Week", "Habits", "Upcoming", "Goals", "Today").forEach { label ->
+                    navigateToDashboardDestination(label)
                 }
+                openQuickCaptureIfAvailable()
             }
         }
     }

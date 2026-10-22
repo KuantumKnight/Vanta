@@ -69,6 +69,17 @@ object VantaWidgetRefresh {
         }
     }
 
+    /** Re-renders installed widgets after a visual preference changes, without rebuilding day state. */
+    suspend fun refreshAppearance(context: Context) {
+        val appContext = context.applicationContext
+        if (hasWidgetInstance(appContext, SystemWidgetReceiver::class.java)) {
+            SystemWidget().updateGlanceWidgets(appContext)
+        }
+        if (hasWidgetInstance(appContext, TodayCompactWidgetReceiver::class.java)) {
+            TodayCompactWidget().updateGlanceWidgets(appContext)
+        }
+    }
+
     /** Used for first placement and malformed/missing persisted state. */
     fun requestRefresh(context: Context) {
         val appContext = context.applicationContext

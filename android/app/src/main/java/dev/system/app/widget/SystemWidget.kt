@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalSize
@@ -42,10 +41,14 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import dev.system.app.MainActivity
 import dev.system.app.SystemApplication
+import dev.system.app.settings.ThemePreference
 import dev.system.app.sync.SyncWorker
+import dev.system.app.ui.theme.VantaSpacing
+import dev.system.app.ui.theme.VantaTypeSize
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -68,7 +71,7 @@ class SystemWidget : GlanceAppWidget() {
         val state = persistedState?.takeIf { it.localDate == today.toString() }
         if (state == null) VantaWidgetRefresh.requestRefresh(context)
 
-        val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val dark = widgetIsDark(context)
         val colors = WidgetColors(dark)
         val openApp = actionStartActivity(Intent(context, MainActivity::class.java))
         val quickAdd = actionStartActivity(quickAddIntent(context, WidgetIntentContract.SOURCE_NOW_NEXT))
@@ -92,29 +95,29 @@ private fun NowNextContent(
     Column(
         modifier = GlanceModifier.fillMaxSize()
             .background(colors.background)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = VantaSpacing.md, vertical = VantaSpacing.sm),
     ) {
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = GlanceModifier.defaultWeight().clickable(openApp)) {
-                Text("VANTA", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = colors.accent))
-                Text(today.format(DateTimeFormatter.ofPattern("EEE · d MMM")), style = TextStyle(fontSize = 11.sp, color = colors.muted))
+                Text("Vanta", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = VantaTypeSize.taskTitle, color = colors.accent))
+                Text(today.format(DateTimeFormatter.ofPattern("EEE · d MMM")), style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted))
             }
-            Text("＋", style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp, color = colors.accent), modifier = GlanceModifier.clickable(quickAdd))
+            Button(text = "Add", onClick = quickAdd)
         }
 
-        Spacer(GlanceModifier.height(8.dp))
+        Spacer(GlanceModifier.height(VantaSpacing.xs))
         when {
             state == null -> EmptyWidgetMessage("Updating your plan…", colors.muted, openApp)
             state.isEmpty -> EmptyWidgetMessage("Your day is open.", colors.muted, openApp)
             state.currentOccurrence == null && state.nextOccurrence == null -> EmptyWidgetMessage("No more scheduled tasks today", colors.muted, openApp)
             else -> {
                 state.currentOccurrence?.let { current ->
-                    WidgetLabel("NOW", colors.accent)
+                    WidgetLabel("Now", colors.accent)
                     Row(modifier = GlanceModifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = GlanceModifier.defaultWeight().clickable(openApp)) {
-                            Text(current.title, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = 15.sp, color = colors.foreground), maxLines = 1)
+                            Text(current.title, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = VantaTypeSize.taskTitle, color = colors.foreground), maxLines = 1)
                             current.end?.let { end ->
-                                Text("Ends ${clockLabel(end)}", style = TextStyle(fontSize = 12.sp, color = colors.muted))
+                                Text("Ends ${clockLabel(end)}", style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted))
                             }
                         }
                         CompleteButton(current.id)
@@ -122,19 +125,19 @@ private fun NowNextContent(
                 }
 
                 state.nextOccurrence?.let { next ->
-                    WidgetLabel(if (state.currentOccurrence == null) nextLabel(next) else "NEXT · ${clockLabel(checkNotNull(next.start))}", colors.accent)
-                    Text(next.title, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = 14.sp, color = colors.foreground), maxLines = 1, modifier = GlanceModifier.fillMaxWidth().clickable(openApp))
+                    WidgetLabel(nextLabel(next), colors.accent)
+                    Text(next.title, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = VantaTypeSize.taskTitle, color = colors.foreground), maxLines = 1, modifier = GlanceModifier.fillMaxWidth().clickable(openApp))
                     val nextStart = next.start
                     if (state.currentOccurrence == null && nextStart != null) {
                         val label = if (nextStart.atZone(zone).toLocalDate() == today) "Free until ${clockLabel(nextStart)}" else "Next plan ${dateTimeLabel(nextStart)}"
-                        Text(label, style = TextStyle(fontSize = 11.sp, color = colors.muted))
+                        Text(label, style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted))
                     } else if (sizeClass == WidgetSizeClass.EXPANDED) {
-                        Text("Up next", style = TextStyle(fontSize = 11.sp, color = colors.muted))
+                        Text("Up next", style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted))
                     }
                 }
 
                 if (state.nextOccurrence == null) {
-                    Text("No more scheduled tasks today", style = TextStyle(fontSize = 12.sp, color = colors.muted), modifier = GlanceModifier.padding(top = 5.dp))
+                    Text("No more scheduled tasks today", style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted), modifier = GlanceModifier.padding(top = 5.dp))
                 }
 
                 if (sizeClass == WidgetSizeClass.EXPANDED && state.todayItems.size > 1) {
@@ -143,12 +146,12 @@ private fun NowNextContent(
                         .filterNot { it.id == state.currentOccurrence?.id || it.id == state.nextOccurrence?.id }
                         .take(2)
                         .forEach { item ->
-                            val time = if (item.allDay) "ALL DAY" else item.scheduledFor
+                            val time = if (item.allDay) "All day" else item.scheduledFor
                                 ?.let { runCatching { clockLabel(Instant.parse(it)) }.getOrNull() }
-                                ?: "Anytime"
+                                ?: "Any time"
                             Text(
                                 "$time  ${item.title}",
-                                style = TextStyle(fontSize = 11.sp, color = colors.muted),
+                                style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted),
                                 maxLines = 1,
                             )
                         }
@@ -157,7 +160,7 @@ private fun NowNextContent(
         }
 
         if (state?.syncWarning == true) {
-            Text("Saved offline · sync will retry", style = TextStyle(fontSize = 10.sp, color = colors.muted), modifier = GlanceModifier.padding(top = 4.dp))
+            Text("Saved offline · sync will retry", style = TextStyle(fontSize = VantaTypeSize.caption, color = colors.muted), modifier = GlanceModifier.padding(top = 4.dp))
         }
     }
 }
@@ -165,14 +168,14 @@ private fun NowNextContent(
 @Composable
 private fun EmptyWidgetMessage(message: String, color: ColorProvider, openApp: Action) {
     Column(modifier = GlanceModifier.fillMaxWidth().clickable(openApp).padding(top = 4.dp)) {
-        Text(message, style = TextStyle(fontSize = 14.sp, color = color), maxLines = 2)
-        Text("Open Vanta or add a task", style = TextStyle(fontSize = 11.sp, color = color), modifier = GlanceModifier.padding(top = 3.dp))
+        Text(message, style = TextStyle(fontSize = VantaTypeSize.metadata, color = color), maxLines = 2)
+        Text("Open Vanta to see what’s next", style = TextStyle(fontSize = VantaTypeSize.caption, color = color), modifier = GlanceModifier.padding(top = 3.dp))
     }
 }
 
 @Composable
 private fun WidgetLabel(label: String, color: ColorProvider) {
-    Text(label, style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 10.sp, color = color), modifier = GlanceModifier.fillMaxWidth())
+    Text(label, style = TextStyle(fontWeight = FontWeight.Medium, fontSize = VantaTypeSize.caption, color = color), modifier = GlanceModifier.fillMaxWidth())
 }
 
 @Composable
@@ -218,7 +221,7 @@ internal enum class WidgetSizeClass {
 internal class WidgetColors(dark: Boolean) {
     val background = ColorProvider(ComposeColor(if (dark) 0xFF151C19 else 0xFFF9FBF9))
     val foreground = ColorProvider(ComposeColor(if (dark) 0xFFE0E5E2 else 0xFF171D1B))
-    val muted = ColorProvider(ComposeColor(if (dark) 0xFFC0C9C4 else 0xFF52605A))
+    val muted = ColorProvider(ComposeColor(if (dark) 0xFFC0C9C4 else 0xFF404845))
     val accent = ColorProvider(ComposeColor(if (dark) 0xFF80D5C9 else 0xFF006B61))
 }
 
@@ -230,8 +233,20 @@ internal fun quickAddIntent(context: Context, source: String): Intent =
         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
 private fun nextLabel(item: WidgetDayItem): String {
-    val start = item.start ?: return "NEXT"
-    return if (start.atZone(zone).toLocalDate() == LocalDate.now(zone)) "NEXT · ${clockLabel(start)}" else "NEXT · ${dateTimeLabel(start)}"
+    val start = item.start ?: return "Next"
+    return if (start.atZone(zone).toLocalDate() == LocalDate.now(zone)) "Next · ${clockLabel(start)}" else "Next · ${dateTimeLabel(start)}"
+}
+
+internal suspend fun widgetIsDark(context: Context): Boolean {
+    val systemDark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    val preference = runCatching {
+        (context.applicationContext as SystemApplication).userPreferencesRepository.preferences.first().theme
+    }.getOrDefault(ThemePreference.SYSTEM)
+    return when (preference) {
+        ThemePreference.SYSTEM -> systemDark
+        ThemePreference.LIGHT -> false
+        ThemePreference.DARK -> true
+    }
 }
 
 private fun clockLabel(instant: Instant): String = DateTimeFormatter.ofPattern("h:mm a").format(instant.atZone(zone))

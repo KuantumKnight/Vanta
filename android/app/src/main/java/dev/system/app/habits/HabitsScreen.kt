@@ -14,8 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -31,6 +32,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.system.app.ui.components.VantaCard
+import dev.system.app.ui.components.VantaCardTone
+import dev.system.app.ui.components.VantaSectionHeader
+import dev.system.app.ui.theme.VantaSpacing
 import java.time.LocalDate
 import java.time.format.TextStyle
 
@@ -84,15 +89,19 @@ internal fun HabitsScreen(
 ) {
     val occurrences = habits.flatMap { it.todayOccurrences }
     val completed = occurrences.count { it.status == HabitOccurrenceStatus.COMPLETED }
+    val dueHabitIds = occurrences.mapTo(mutableSetOf()) { it.habitId }
+    val otherRoutines = habits.filterNot { it.id in dueHabitIds }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = VantaSpacing.lg,
+            vertical = VantaSpacing.md,
+        ),
+        verticalArrangement = Arrangement.spacedBy(VantaSpacing.sm),
     ) {
         item {
-            Text("TODAY", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            Text("Habits", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+            Text("Habits", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 "$completed / ${occurrences.size} complete",
                 style = MaterialTheme.typography.bodyMedium,
@@ -103,17 +112,14 @@ internal fun HabitsScreen(
 
         if (habits.isEmpty() || occurrences.isEmpty()) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                VantaCard(tone = VantaCardTone.Subtle) {
+                    Column(Modifier.fillMaxWidth().padding(VantaSpacing.xl)) {
                         Text("No habits due today", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                         Text(
                             "Your routine can wait until its next scheduled day.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp),
+                            modifier = Modifier.padding(top = VantaSpacing.xxs),
                         )
                     }
                 }
@@ -128,10 +134,10 @@ internal fun HabitsScreen(
             }
         }
 
-        item {
-            Text("YOUR ROUTINES", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+        if (otherRoutines.isNotEmpty()) {
+            item { VantaSectionHeader("Other routines", "Not due today") }
         }
-        items(habits, key = { "summary-${it.id}" }) { habit ->
+        items(otherRoutines, key = { "summary-" + it.id }) { habit ->
             HabitSummaryRow(habit = habit, onClick = { onOpenHabit(habit) })
         }
         item { Spacer(Modifier.height(8.dp)) }
@@ -146,13 +152,15 @@ internal fun HabitDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = VantaSpacing.lg, vertical = VantaSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(VantaSpacing.md),
     ) {
         Text(detail.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         Text(detail.scheduleDescription, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(VantaSpacing.sm), modifier = Modifier.fillMaxWidth()) {
             StreakMetricCard("Current streak", detail.currentStreak, detail.streakUnitLabel, Modifier.weight(1f))
             StreakMetricCard("Best streak", detail.bestStreak, detail.streakUnitLabel, Modifier.weight(1f))
         }
@@ -210,11 +218,11 @@ private fun HabitOccurrenceRow(
 private fun HabitSummaryRow(habit: HabitSummary, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = VantaSpacing.md, vertical = VantaSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {

@@ -1,20 +1,23 @@
 package dev.system.app.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -30,6 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import dev.system.app.ui.components.VantaCard
+import dev.system.app.ui.theme.VantaLayout
+import dev.system.app.ui.theme.VantaSpacing
 import dev.system.app.settings.ThemePreference
 import dev.system.app.settings.UserPreferences
 import java.time.DayOfWeek
@@ -49,12 +55,13 @@ internal fun SettingsScreen(
 ) {
     var showResetConfirmation by rememberSaveable { mutableStateOf(false) }
 
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
     LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.widthIn(max = VantaLayout.contentMaxWidth).fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(VantaSpacing.sm),
     ) {
         item {
-            Column(modifier = Modifier.padding(top = 20.dp, bottom = 2.dp)) {
+            Column(modifier = Modifier.padding(top = VantaSpacing.md, bottom = VantaSpacing.xxs)) {
                 Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
                 Text(
                     "Make Vanta fit the way you plan your day.",
@@ -163,6 +170,7 @@ internal fun SettingsScreen(
         }
         item { Spacer(Modifier.height(8.dp)) }
     }
+    }
 
     if (showResetConfirmation) {
         AlertDialog(
@@ -184,10 +192,10 @@ internal fun SettingsScreen(
 
 @Composable
 private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    VantaCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(horizontal = VantaSpacing.md, vertical = VantaSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(VantaSpacing.sm),
             content = {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 content()
@@ -205,8 +213,8 @@ private fun TimePreferenceRow(
 ) {
     var draft by remember(value) { mutableStateOf(value.asClockTime()) }
     val parsed = parseClockTime(draft)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+    Column(verticalArrangement = Arrangement.spacedBy(VantaSpacing.xxs)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
         OutlinedTextField(
             value = draft,
             onValueChange = { next ->
@@ -215,7 +223,7 @@ private fun TimePreferenceRow(
                     parseClockTime(next)?.let(onValidTime)
                 }
             },
-            modifier = Modifier.weight(0.6f),
+            modifier = Modifier.fillMaxWidth(),
             label = { Text("HH:mm") },
             singleLine = true,
             isError = draft.isNotEmpty() && parsed == null,
@@ -235,10 +243,12 @@ private fun <T> ChoicePreferenceRow(
     onSelected: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Column {
-            TextButton(onClick = { expanded = true }) { Text(value) }
+    Column(verticalArrangement = Arrangement.spacedBy(VantaSpacing.xxs)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Box {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(value)
+            }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 choices.forEach { (label, item) ->
                     DropdownMenuItem(
@@ -261,12 +271,12 @@ private fun TogglePreferenceRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(verticalArrangement = Arrangement.spacedBy(VantaSpacing.xxs)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

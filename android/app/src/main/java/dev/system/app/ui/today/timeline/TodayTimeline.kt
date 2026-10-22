@@ -1,6 +1,8 @@
 package dev.system.app.ui.today.timeline
 
 import android.app.TimePickerDialog
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -43,18 +45,32 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import dev.system.app.data.CachedOccurrence
+import dev.system.app.planner.ScheduleType
 import dev.system.app.planner.ScheduleBlock
-import dev.system.app.planner.ScheduleSource
-import dev.system.app.ui.components.EmptyState
-import dev.system.app.ui.components.SectionHeading
 import dev.system.app.ui.components.TaskCard
+import dev.system.app.ui.components.VantaCard
+import dev.system.app.ui.components.VantaCardTone
+import dev.system.app.ui.components.VantaChip
+import dev.system.app.ui.components.VantaEmptyState
+import dev.system.app.ui.components.VantaSectionHeader
 import dev.system.app.ui.components.taskDate
+import dev.system.app.ui.theme.LocalVantaColors
+import dev.system.app.ui.theme.VantaElevation
+import dev.system.app.ui.theme.VantaIconSize
+import dev.system.app.ui.theme.VantaLayout
+import dev.system.app.ui.theme.VantaMotion
+import dev.system.app.ui.theme.VantaSpacing
+import dev.system.app.ui.theme.VantaTimeline
+import dev.system.app.ui.theme.vantaMotionDuration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -101,33 +117,38 @@ internal fun TodayTimeline(
             else block.copy(start = maxOf(block.start, dayStart), end = minOf(block.end, dayEnd))
         }
     }
-    val displayEntries = remember(dayCalendarBlocks, timelineTasks, today, now, planningStart, planningEnd) {
-        val taskEntries = calculateDayTimeline(
-            timelineTasks,
-            today,
-            now,
-            planningStart = planningStart,
-            planningEnd = planningEnd,
-            externalBlocks = dayCalendarBlocks,
-        ).scheduled.map { TimelineDisplayEntry(it.start.toInstant(), task = it) }
-        val calendarEntries = dayCalendarBlocks.map { TimelineDisplayEntry(it.start, calendar = it) }
-        (taskEntries + calendarEntries).sortedWith(compareBy<TimelineDisplayEntry> { it.start }.thenBy { it.key })
-    }
-    val plan = remember(timelineTasks, today, now, planningStart, planningEnd, dayCalendarBlocks) {
+    // The schedule projection only changes when tasks, the day, or planning inputs change.
+    // Current/next labels are derived separately below so the minute clock does not repeat
+    // overlap detection and free-time aggregation.
+    val basePlan = remember(timelineTasks, today, planningStart, planningEnd, dayCalendarBlocks) {
         calculateDayTimeline(
             timelineTasks,
             today,
-            now,
+            today.atStartOfDay(VANTA_TIME_ZONE).toInstant(),
             planningStart = planningStart,
             planningEnd = planningEnd,
             externalBlocks = dayCalendarBlocks,
         )
     }
+    val currentTaskId = remember(basePlan.scheduled, now) {
+        basePlan.scheduled.firstOrNull { block ->
+            val end = block.end?.toInstant()
+            end != null && block.start.toInstant() <= now && now < end
+        }?.task?.id
+    }
+    val nextTaskId = remember(basePlan.scheduled, now) {
+        basePlan.scheduled.firstOrNull { it.start.toInstant() > now }?.task?.id
+    }
+    val displayEntries = remember(dayCalendarBlocks, basePlan.scheduled) {
+        val taskEntries = basePlan.scheduled.map { TimelineDisplayEntry(it.start.toInstant(), task = it) }
+        val calendarEntries = dayCalendarBlocks.map { TimelineDisplayEntry(it.start, calendar = it) }
+        (taskEntries + calendarEntries).sortedWith(compareBy<TimelineDisplayEntry> { it.start }.thenBy { it.key })
+    }
     val overdue = remember(rows, today) {
         rows.filter { it.taskDate()?.let { date -> date < today } == true }
     }
-    val fitIntoToday = remember(plan.unscheduled, unscheduledRows, rowsById) {
-        (plan.unscheduled.mapNotNull { rowsById[it.id] } + unscheduledRows).distinctBy(CachedOccurrence::id)
+    val fitIntoToday = remember(basePlan.unscheduled, unscheduledRows, rowsById) {
+        (basePlan.unscheduled.mapNotNull { rowsById[it.id] } + unscheduledRows).distinctBy(CachedOccurrence::id)
     }
     val nowMarkerIndex = displayEntries.count { it.start <= now }
     val isToday = now.atZone(VANTA_TIME_ZONE).toLocalDate() == today
@@ -135,22 +156,33 @@ internal fun TodayTimeline(
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         // Keep the last timeline row scrollable clear of Dashboard's bottom-right FAB.
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 88.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(
+            start = VantaLayout.screenHorizontalPadding,
+            end = VantaLayout.screenHorizontalPadding,
+            bottom = VantaIconSize.touchTarget + VantaSpacing.xxxl,
+        ),
+        verticalArrangement = Arrangement.spacedBy(VantaTimeline.itemSpacing),
     ) {
         item(key = "timeline-summary") {
-            TimelineSummary(plan, planningStart, planningEnd, dayCalendarBlocks.size)
+            TimelineSummary(
+                scheduledCount = basePlan.scheduledCount,
+                calendarBlockCount = dayCalendarBlocks.size,
+                plannedMinutes = basePlan.plannedMinutes,
+                freeMinutes = basePlan.freeMinutes,
+                planningStart = planningStart,
+                planningEnd = planningEnd,
+            )
         }
 
         plannerContent?.let { content ->
             item(key = "planner-actions") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+                Column(verticalArrangement = Arrangement.spacedBy(VantaSpacing.sm)) { content() }
             }
         }
 
         if (overdue.isNotEmpty()) {
             item(key = "overdue-heading") {
-                SectionHeading("OVERDUE", "${overdue.size} waiting")
+                VantaSectionHeader("Overdue", "${overdue.size} waiting")
             }
             items(overdue, key = { "overdue-${it.id}" }) { row ->
                 TaskCard(row = row, onComplete = onComplete)
@@ -158,7 +190,7 @@ internal fun TodayTimeline(
         }
 
         item(key = "schedule-heading") {
-            SectionHeading("TODAY TIMELINE", "${displayEntries.size} blocks")
+            VantaSectionHeader("Timeline", "${displayEntries.size} ${if (displayEntries.size == 1) "item" else "items"}")
         }
 
         if (displayEntries.isEmpty()) {
@@ -167,7 +199,7 @@ internal fun TodayTimeline(
             }
             if (rows.isEmpty() && unscheduledRows.isEmpty()) {
                 item(key = "timeline-empty") {
-                    EmptyState(
+                    VantaEmptyState(
                         modifier = Modifier.fillMaxWidth(),
                         title = emptyTitle,
                         body = emptyBody,
@@ -186,8 +218,9 @@ internal fun TodayTimeline(
                         TimelineEventRow(
                             block = taskBlock,
                             source = source,
-                            isNext = taskBlock.task.id == plan.nextTaskId,
-                            scheduled = plan.scheduled,
+                            isCurrent = taskBlock.task.id == currentTaskId,
+                            isNext = taskBlock.task.id == nextTaskId,
+                            scheduled = basePlan.scheduled,
                             calendarBlocks = dayCalendarBlocks,
                             onComplete = onComplete,
                             onReschedule = onReschedule,
@@ -207,7 +240,7 @@ internal fun TodayTimeline(
 
         if (fitIntoToday.isNotEmpty()) {
             item(key = "unscheduled-heading") {
-                SectionHeading("FIT INTO TODAY", "${fitIntoToday.size} anytime")
+                VantaSectionHeader("Anytime", "${fitIntoToday.size} ${if (fitIntoToday.size == 1) "task" else "tasks"}")
             }
             items(fitIntoToday, key = { "fit-${it.id}" }) { row ->
                 TaskCard(row = row, onComplete = onComplete)
@@ -217,23 +250,32 @@ internal fun TodayTimeline(
 }
 
 @Composable
-private fun TimelineSummary(plan: DayTimeline, planningStart: LocalTime, planningEnd: LocalTime, calendarBlockCount: Int) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+private fun TimelineSummary(
+    scheduledCount: Int,
+    calendarBlockCount: Int,
+    plannedMinutes: Int,
+    freeMinutes: Long,
+    planningStart: LocalTime,
+    planningEnd: LocalTime,
+) {
+    VantaCard(modifier = Modifier.fillMaxWidth(), tone = VantaCardTone.Subtle) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = VantaSpacing.md, vertical = VantaSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(VantaSpacing.xxs),
+        ) {
             Text(
-                "${plan.scheduledCount} tasks · $calendarBlockCount calendar · ${formatMinutes(plan.plannedMinutes.toLong())} planned",
-                style = MaterialTheme.typography.titleSmall,
+                buildString {
+                    append("$scheduledCount ${if (scheduledCount == 1) "task" else "tasks"}")
+                    if (calendarBlockCount > 0) append(" · $calendarBlockCount calendar")
+                    append(" · ${formatMinutes(plannedMinutes.toLong())} planned")
+                },
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                "${formatMinutes(plan.freeMinutes)} free between ${ClockFormatter.format(planningStart)}–${ClockFormatter.format(planningEnd)}",
-                style = MaterialTheme.typography.bodySmall,
+                "${formatMinutes(freeMinutes)} free between ${ClockFormatter.format(planningStart)}–${ClockFormatter.format(planningEnd)}",
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
             )
         }
     }
@@ -243,6 +285,7 @@ private fun TimelineSummary(plan: DayTimeline, planningStart: LocalTime, plannin
 private fun TimelineEventRow(
     block: TimelineBlock,
     source: CachedOccurrence,
+    isCurrent: Boolean,
     isNext: Boolean,
     scheduled: List<TimelineBlock>,
     calendarBlocks: List<ScheduleBlock>,
@@ -257,11 +300,20 @@ private fun TimelineEventRow(
     }
     val context = LocalContext.current
     val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
     val latestOnReschedule = rememberUpdatedState(onReschedule)
-    val canReschedule = source.status == "pending" && !source.allDay && source.scheduleType == "SOFT"
+    val scheduleType = remember(source.scheduleType) {
+        runCatching { ScheduleType.valueOf(source.scheduleType) }.getOrDefault(ScheduleType.FLEXIBLE)
+    }
+    val canReschedule = source.status == "pending" && !source.allDay && scheduleType == ScheduleType.SOFT
     var dragPreview by remember(source.id, originalStart, snapIntervalMinutes) { mutableStateOf<Instant?>(null) }
     var committedPreview by remember(source.id, originalStart, snapIntervalMinutes) { mutableStateOf<Instant?>(null) }
     var dragOffsetYPx by remember(source.id, originalStart, snapIntervalMinutes) { mutableFloatStateOf(0f) }
+    val dragScale by animateFloatAsState(
+        targetValue = if (dragPreview != null) 1.01f else 1f,
+        animationSpec = tween(durationMillis = vantaMotionDuration(VantaMotion.fastMillis)),
+        label = "timeline-drag-scale",
+    )
     val visibleStart = dragPreview ?: committedPreview ?: originalStart
     val visibleStartZoned = visibleStart.atZone(VANTA_TIME_ZONE)
     val visibleEnd = source.durationMinutes
@@ -279,11 +331,12 @@ private fun TimelineEventRow(
     }
 
     val dragGesture = if (canReschedule) {
-        Modifier.pointerInput(source.id, originalStart, snapIntervalMinutes, density.density) {
+        Modifier.pointerInput(source.id, originalStart, snapIntervalMinutes, density.density, haptic) {
             detectDragGesturesAfterLongPress(
                 onDragStart = {
                     dragOffsetYPx = 0f
                     dragPreview = originalStart
+                    haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
                 },
                 onDragEnd = {
                     val destination = dragPreview
@@ -293,21 +346,31 @@ private fun TimelineEventRow(
                     if (destination != null && movementDp >= MINIMUM_DRAG_COMMIT_DP && destination != originalStart) {
                         committedPreview = destination
                         latestOnReschedule.value(source, destination)
+                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                    } else if (destination != null && destination != originalStart) {
+                        haptic.performHapticFeedback(HapticFeedbackType.Reject)
                     }
                 },
                 onDragCancel = {
                     dragOffsetYPx = 0f
                     dragPreview = null
+                    haptic.performHapticFeedback(HapticFeedbackType.Reject)
                 },
                 onDrag = { change, dragAmount ->
                     change.consume()
                     dragOffsetYPx += dragAmount.y
                     val movementDp = with(density) { dragOffsetYPx.toDp().value }
-                    dragPreview = previewTimeForVerticalDrag(
+                    val preview = previewTimeForVerticalDrag(
                         originalStart,
                         movementDp,
                         intervalMinutes = snapIntervalMinutes,
                     )
+                    if (preview != dragPreview) {
+                        if (preview != null && preview != originalStart) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        dragPreview = preview
+                    }
                 },
             )
         }
@@ -321,33 +384,51 @@ private fun TimelineEventRow(
             .zIndex(if (dragPreview != null) 1f else 0f),
         verticalAlignment = Alignment.Top,
     ) {
-        Column(modifier = Modifier.width(54.dp).padding(top = 12.dp)) {
+        Column(modifier = Modifier.width(VantaTimeline.timeColumnWidth).padding(top = VantaSpacing.sm)) {
             Text(
                 ClockFormatter.format(visibleStartZoned),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        TimelineRail(modifier = Modifier.width(16.dp).fillMaxHeight())
-        Spacer(Modifier.width(8.dp))
+        TimelineRail(modifier = Modifier.width(VantaTimeline.railWidth).fillMaxHeight())
+        Spacer(Modifier.width(VantaSpacing.xs))
+        val semanticColors = LocalVantaColors.current
+        val blockColors = when (scheduleType) {
+            ScheduleType.HARD -> semanticColors.timelineHard to semanticColors.onTimelineHard
+            ScheduleType.SOFT -> semanticColors.timelineSoft to semanticColors.onTimelineSoft
+            ScheduleType.FLEXIBLE -> semanticColors.timelineFlexible to semanticColors.onTimelineFlexible
+        }
+        val scheduleLabel = when (scheduleType) {
+            ScheduleType.HARD -> "Fixed"
+            ScheduleType.SOFT -> "Planned"
+            ScheduleType.FLEXIBLE -> "Anytime"
+        }
         Card(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).then(dragGesture),
             colors = CardDefaults.cardColors(
-                containerColor = if (block.isCurrent) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface,
+                containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else blockColors.first,
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = if (dragPreview != null) 8.dp else 1.dp),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = if (dragPreview != null) VantaElevation.raised else VantaElevation.flat,
+            ),
+            shape = MaterialTheme.shapes.medium,
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .graphicsLayer { scaleX = dragScale; scaleY = dragScale }
+                    .padding(start = VantaSpacing.sm, end = VantaSpacing.xs, top = VantaSpacing.sm, bottom = VantaSpacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         block.task.title,
-                        modifier = dragGesture.semantics {
+                        modifier = Modifier.semantics {
                             if (canReschedule) {
-                                contentDescription = "${block.task.title}. Long press and drag to reschedule in $snapIntervalMinutes minute steps."
+                                contentDescription = "${block.task.title}. Long press and drag to move in $snapIntervalMinutes minute steps, or use Set start time."
+                                dragPreview?.let { preview ->
+                                    stateDescription = "Moving to ${ClockFormatter.format(preview.atZone(VANTA_TIME_ZONE))}"
+                                }
                             }
                         },
                         style = MaterialTheme.typography.titleMedium,
@@ -363,29 +444,37 @@ private fun TimelineEventRow(
                         details,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 3.dp),
+                        modifier = Modifier.padding(top = VantaSpacing.xxs),
                     )
-                    when {
-                        dragPreview != null -> TimelineTag(
-                            "MOVING TO ${ClockFormatter.format(visibleStartZoned)}",
-                            isEmphasis = true,
+                    Row(
+                        modifier = Modifier.padding(top = VantaSpacing.xs),
+                        horizontalArrangement = Arrangement.spacedBy(VantaSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        VantaChip(
+                            label = scheduleLabel,
+                            containerColor = blockColors.first,
+                            contentColor = blockColors.second,
                         )
-                        block.isCurrent -> TimelineTag("IN PROGRESS", isEmphasis = true)
-                        isNext -> TimelineTag("NEXT", isEmphasis = false)
+                        when {
+                            dragPreview != null -> TimelineTag(
+                                "Moving to ${ClockFormatter.format(visibleStartZoned)}",
+                                isEmphasis = true,
+                            )
+                            isCurrent -> TimelineTag("In progress", isEmphasis = true)
+                            isNext -> TimelineTag("Next", isEmphasis = false)
+                        }
                     }
                     if (overlaps.isNotEmpty()) {
-                        TimelineTag("OVERLAPS WITH ${overlapSummary(overlaps)}", isWarning = true)
+                        TimelineTag("Overlaps ${overlapSummary(overlaps)}", isWarning = true)
                     } else if (dragPreview == null && committedPreview == null && block.overlapsAnotherTask) {
-                        TimelineTag("OVERLAPS ANOTHER TASK", isWarning = true)
+                        TimelineTag("Overlaps another task", isWarning = true)
                     }
-                    Text(
-                        if (block.task.completed) "Completed" else "Pending",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
+                    if (block.task.completed) {
+                        TimelineTag("Completed", isSuccess = true)
+                    }
                     if (canReschedule) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(VantaSpacing.xxs)) {
                             TextButton(
                                 onClick = {
                                     TimePickerDialog(
@@ -397,6 +486,7 @@ private fun TimelineEventRow(
                                             if (snapped != originalStart) {
                                                 committedPreview = snapped
                                                 latestOnReschedule.value(source, snapped)
+                                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                             }
                                         },
                                         visibleStartZoned.hour,
@@ -405,7 +495,7 @@ private fun TimelineEventRow(
                                     ).show()
                                 },
                             ) {
-                                Text("Reschedule")
+                                Text("Set start time")
                             }
                             TextButton(onClick = { onStartFocus(source) }) {
                                 Text("Start focus")
@@ -430,15 +520,21 @@ private fun CalendarTimelineRow(block: ScheduleBlock) {
     val zone = VANTA_TIME_ZONE
     val start = block.start.atZone(zone)
     val end = block.end.atZone(zone)
-    val time = if (block.allDay) "ALL DAY" else "${ClockFormatter.format(start)}–${ClockFormatter.format(end)}"
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text("$time · CALENDAR · HARD · READ ONLY", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
-            Text(block.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onTertiaryContainer)
+    val time = if (block.allDay) "All day" else "${ClockFormatter.format(start)}–${ClockFormatter.format(end)}"
+    val semanticColors = LocalVantaColors.current
+    VantaCard(modifier = Modifier.fillMaxWidth(), tone = VantaCardTone.Subtle) {
+        Column(modifier = Modifier.fillMaxWidth().padding(VantaSpacing.md)) {
+            VantaChip(
+                label = "Calendar · $time",
+                containerColor = semanticColors.calendarExternal,
+                contentColor = semanticColors.onCalendarExternal,
+            )
+            Text(
+                block.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = VantaSpacing.xs),
+            )
         }
     }
 }
@@ -465,7 +561,7 @@ private fun TimelineRail(modifier: Modifier) {
             )
         }
         Box(
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 15.dp).size(10.dp)
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = VantaSpacing.md).size(VantaTimeline.markerSize)
                 .background(markerColor, CircleShape),
         )
     }
@@ -475,17 +571,17 @@ private fun TimelineRail(modifier: Modifier) {
 private fun NowMarker(now: Instant) {
     val markerColor = MaterialTheme.colorScheme.primary
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = VantaSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             ClockFormatter.format(now.atZone(VANTA_TIME_ZONE)),
-            modifier = Modifier.width(54.dp),
+            modifier = Modifier.width(VantaTimeline.timeColumnWidth),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
         )
-        Canvas(modifier = Modifier.size(width = 16.dp, height = 12.dp)) {
+        Canvas(modifier = Modifier.size(width = VantaTimeline.railWidth, height = VantaSpacing.sm)) {
             drawLine(
                 color = markerColor,
                 start = androidx.compose.ui.geometry.Offset(0f, size.height / 2f),
@@ -499,37 +595,44 @@ private fun NowMarker(now: Instant) {
             )
         }
         Text(
-            "NOW",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
+            "Now",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 8.dp),
+            modifier = Modifier.padding(start = VantaSpacing.xs),
         )
     }
 }
 
 @Composable
-private fun TimelineTag(label: String, isEmphasis: Boolean = false, isWarning: Boolean = false) {
+private fun TimelineTag(
+    label: String,
+    isEmphasis: Boolean = false,
+    isWarning: Boolean = false,
+    isSuccess: Boolean = false,
+) {
     val foreground = when {
-        isWarning -> MaterialTheme.colorScheme.error
+        isWarning -> LocalVantaColors.current.onWarningContainer
+        isSuccess -> LocalVantaColors.current.onSuccessContainer
         isEmphasis -> MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.primary
     }
     Surface(
         color = when {
-            isWarning -> MaterialTheme.colorScheme.errorContainer
-            isEmphasis -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            isWarning -> LocalVantaColors.current.warningContainer
+            isSuccess -> LocalVantaColors.current.successContainer
+            isEmphasis -> MaterialTheme.colorScheme.primaryContainer
             else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
         },
         contentColor = foreground,
         shape = MaterialTheme.shapes.small,
-        modifier = Modifier.padding(top = 6.dp),
+        modifier = Modifier.padding(top = VantaSpacing.xs),
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            modifier = Modifier.padding(horizontal = VantaSpacing.xs, vertical = VantaSpacing.xxs),
         )
     }
 }

@@ -10,11 +10,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,8 +34,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -43,6 +49,12 @@ import dev.system.app.planner.ScheduleBlock
 import dev.system.app.planner.ScheduleSource
 import dev.system.app.planner.ScheduleType
 import dev.system.app.planner.core.findFreeIntervals
+import dev.system.app.ui.components.VantaCard
+import dev.system.app.ui.components.VantaCardTone
+import dev.system.app.ui.components.VantaChip
+import dev.system.app.ui.components.VantaSectionHeader
+import dev.system.app.ui.theme.LocalVantaColors
+import dev.system.app.ui.theme.VantaSpacing
 import java.time.Duration
 import java.time.LocalDate
 import java.time.DayOfWeek
@@ -112,8 +124,13 @@ internal fun WeeklyPlannerScreen(
 
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(
+                start = VantaSpacing.lg,
+                end = VantaSpacing.lg,
+                top = VantaSpacing.md,
+                bottom = VantaSpacing.xl,
+            ),
+            verticalArrangement = Arrangement.spacedBy(VantaSpacing.sm),
         ) {
             item(key = "selected-day-heading-${selectedDay}") {
                 SelectedDaySummary(
@@ -125,24 +142,21 @@ internal fun WeeklyPlannerScreen(
 
             if (sortedBlocks.isEmpty()) {
                 item(key = "empty-day-${selectedDay}") {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
+                    VantaCard(modifier = Modifier.fillMaxWidth(), tone = VantaCardTone.Subtle) {
+                        Column(Modifier.padding(VantaSpacing.md)) {
                             Text("No scheduled blocks", fontWeight = FontWeight.SemiBold)
                             Text(
                                 "This day is open. Add a task or schedule something from the flexible list.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
+                                modifier = Modifier.padding(top = VantaSpacing.xxs),
                             )
                         }
                     }
                 }
             } else {
                 item(key = "day-blocks-heading-${selectedDay}") {
-                    Text("SCHEDULE", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    VantaSectionHeader("Scheduled")
                 }
                 items(sortedBlocks, key = { it.id }) { block ->
                     val completed = block.id in daySchedule?.completedOccurrenceIds.orEmpty()
@@ -163,13 +177,13 @@ internal fun WeeklyPlannerScreen(
 
             if (weekFlexibleTasks.isNotEmpty()) {
                 item(key = "flexible-tray-heading-${range.startInclusive}") {
-                    Column(Modifier.padding(top = 8.dp)) {
-                        Text("TO SCHEDULE THIS WEEK", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Column(Modifier.padding(top = VantaSpacing.xs)) {
+                        Text("Flexible tasks", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Flexible tasks stay unscheduled until you choose a time.",
+                            "Choose a day to place a task in your week.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 3.dp),
+                            modifier = Modifier.padding(top = VantaSpacing.xxs),
                         )
                     }
                 }
@@ -203,7 +217,7 @@ private fun WeekNavigationHeader(
     } else {
         "${range.startInclusive.format(DateTimeFormatter.ofPattern("MMM d", locale))}–${lastDate.format(DateTimeFormatter.ofPattern("MMM d, yyyy", locale))}"
     }
-    Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = VantaSpacing.xs, vertical = VantaSpacing.xs)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onPrevious, modifier = Modifier.semantics { contentDescription = "Previous week" }) {
                 Text("‹")
@@ -214,8 +228,8 @@ private fun WeekNavigationHeader(
             }
         }
         Text(
-            "WEEK TOTAL · ${formatHours(plannedMinutes)} planned · ${formatHours(calendarMinutes)} calendar · $flexibleCount flexible",
-            modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 2.dp),
+            formatHours(plannedMinutes) + " planned · " + formatHours(calendarMinutes) + " calendar · " + flexibleCount + " flexible",
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = VantaSpacing.xxs),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -236,8 +250,9 @@ private fun WeekDayStrip(
     onSelectDay: (LocalDate) -> Unit,
 ) {
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.selectableGroup(),
+        contentPadding = PaddingValues(horizontal = VantaSpacing.lg),
+        horizontalArrangement = Arrangement.spacedBy(VantaSpacing.xs),
     ) {
         items(range.dates(), key = LocalDate::toString) { date ->
             val schedule = schedulesByDate[date]
@@ -269,16 +284,26 @@ private fun DaySummaryCard(
     val locale = LocalLocale.current.platformLocale
     val colors = MaterialTheme.colorScheme
     Card(
-        modifier = Modifier.width(116.dp).height(128.dp).clickable(onClick = onClick),
+        modifier = Modifier.widthIn(min = 108.dp, max = 124.dp)
+            .heightIn(min = 132.dp)
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                contentDescription = date.format(DateTimeFormatter.ofPattern("EEEE, MMMM d", locale)) +
+                    (if (date == today) ", today" else "")
+                this.selected = selected
+            },
         border = if (selected) BorderStroke(2.dp, colors.primary) else BorderStroke(1.dp, colors.outlineVariant),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) colors.primaryContainer else colors.surface,
         ),
     ) {
-        Column(Modifier.fillMaxSize().padding(11.dp), verticalArrangement = Arrangement.SpaceBetween) {
+        Column(
+            Modifier.fillMaxWidth().padding(VantaSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(VantaSpacing.xs),
+        ) {
             Column {
                 Text(
-                    date.format(DateTimeFormatter.ofPattern("EEE", locale)).uppercase(locale),
+                    date.format(DateTimeFormatter.ofPattern("EEE", locale)),
                     style = MaterialTheme.typography.labelMedium,
                     color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
                     fontWeight = FontWeight.Bold,
@@ -287,7 +312,7 @@ private fun DaySummaryCard(
                     Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     if (date == today) {
                         Spacer(Modifier.width(5.dp))
-                        Text("TODAY", style = MaterialTheme.typography.labelSmall, color = colors.primary, fontWeight = FontWeight.Bold)
+                        Text("Today", style = MaterialTheme.typography.labelSmall, color = colors.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -350,26 +375,34 @@ private fun ScheduleBlockCard(
     val isCalendar = block.source == ScheduleSource.GOOGLE_CALENDAR
     val canReschedule = block.editable && !isCalendar && !completed
     val colors = MaterialTheme.colorScheme
+    val semantic = LocalVantaColors.current
     val background = when {
-        completed -> colors.secondaryContainer
-        isCalendar -> MaterialTheme.colorScheme.tertiaryContainer
-        block.scheduleType == ScheduleType.HARD -> colors.errorContainer
-        block.scheduleType == ScheduleType.SOFT -> colors.surfaceVariant
-        else -> colors.secondaryContainer
+        completed -> colors.surfaceVariant
+        isCalendar -> semantic.calendarExternal
+        block.scheduleType == ScheduleType.HARD -> semantic.timelineHard
+        block.scheduleType == ScheduleType.SOFT -> semantic.timelineSoft
+        else -> semantic.timelineFlexible
     }
     val foreground = when {
-        completed -> colors.onSecondaryContainer
-        isCalendar -> colors.onTertiaryContainer
-        block.scheduleType == ScheduleType.HARD -> colors.onErrorContainer
-        block.scheduleType == ScheduleType.SOFT -> colors.onSurfaceVariant
-        else -> colors.onSecondaryContainer
+        completed -> colors.onSurfaceVariant
+        isCalendar -> semantic.onCalendarExternal
+        block.scheduleType == ScheduleType.HARD -> semantic.onTimelineHard
+        block.scheduleType == ScheduleType.SOFT -> semantic.onTimelineSoft
+        else -> semantic.onTimelineFlexible
+    }
+    val kindLabel = when {
+        completed -> "Completed"
+        isCalendar -> "Calendar"
+        block.scheduleType == ScheduleType.HARD -> "Fixed time"
+        block.scheduleType == ScheduleType.SOFT -> "Moveable"
+        else -> "Anytime"
     }
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onInspect),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = background),
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+        Column(Modifier.fillMaxWidth().padding(VantaSpacing.md)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     formatBlockTime(block, zone),
@@ -386,12 +419,11 @@ private fun ScheduleBlockCard(
                         color = foreground,
                         textDecoration = if (completed) TextDecoration.LineThrough else TextDecoration.None,
                     )
-                    val label = if (completed) "COMPLETED" else
-                        "${block.source.name.replace('_', ' ')} · ${block.scheduleType.name}"
-                    Text(label, style = MaterialTheme.typography.labelSmall, color = foreground)
-                }
-                if (completed) {
-                    Text("DONE", style = MaterialTheme.typography.labelSmall, color = foreground, fontWeight = FontWeight.Bold)
+                    VantaChip(
+                        label = kindLabel,
+                        containerColor = background,
+                        contentColor = foreground,
+                    )
                 }
             }
             Row(
@@ -418,7 +450,7 @@ private fun FreeTimeCard(freeMinutes: Long) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("FREE TIME", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Text("Free time", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
             Text(formatHours(freeMinutes), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         }

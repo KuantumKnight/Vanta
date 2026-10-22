@@ -12,21 +12,27 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
+import dev.system.app.ui.components.VantaCard
+import dev.system.app.ui.components.VantaCardTone
+import dev.system.app.ui.components.VantaSpacing
+import dev.system.app.ui.theme.VantaLayout
 import java.time.format.DateTimeFormatter
 
 @Composable
@@ -36,9 +42,20 @@ internal fun AnalyticsScreen(
     showPlannedVsActual: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
-        Text("Analytics", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(12.dp))
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    Column(
+        Modifier.widthIn(max = VantaLayout.contentMaxWidth).fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = VantaSpacing.lg, vertical = VantaSpacing.md),
+    ) {
+        Text("Your progress", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Text(
+            "A clear view of the time and routines you planned.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = VantaSpacing.xxs),
+        )
+        Spacer(Modifier.height(VantaSpacing.md))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AnalyticsPeriod.values().forEach { period ->
                 FilterChip(
@@ -48,8 +65,8 @@ internal fun AnalyticsScreen(
                 )
             }
         }
-        Spacer(Modifier.height(12.dp))
-        MetricCard(title = summary.period.label.uppercase()) {
+        Spacer(Modifier.height(VantaSpacing.md))
+        MetricCard(title = summary.period.label) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 MetricColumn("Planned", formatMinutes(summary.plannedMinutes), Modifier.weight(1f))
                 if (showPlannedVsActual) {
@@ -69,14 +86,14 @@ internal fun AnalyticsScreen(
                 )
             }
         }
-        Spacer(Modifier.height(12.dp))
-        MetricCard(title = "TASKS") {
+        Spacer(Modifier.height(VantaSpacing.md))
+        MetricCard(title = "Tasks") {
             val rate = summary.taskCompletionRate?.let { "${(it * 100).toInt()}%" } ?: "—"
             Text("${summary.completedTaskCount} / ${summary.plannedTaskCount} completed", style = MaterialTheme.typography.titleMedium)
             Text("Completion rate $rate", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(Modifier.height(12.dp))
-        MetricCard(title = "HABITS") {
+        Spacer(Modifier.height(VantaSpacing.md))
+        MetricCard(title = "Habits") {
             if (summary.habitExpectedCount == 0) {
                 Text("No habit occurrences in this period", style = MaterialTheme.typography.bodyMedium)
             } else {
@@ -86,17 +103,17 @@ internal fun AnalyticsScreen(
             }
         }
         if (showPlannedVsActual) {
-            Spacer(Modifier.height(12.dp))
-            MetricCard(title = "PLANNED VS RECORDED FOCUS") {
+            Spacer(Modifier.height(VantaSpacing.md))
+            MetricCard(title = "Focus time") {
                 Legend()
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(VantaSpacing.xs))
                 PlannedFocusedChart(summary.days)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(VantaSpacing.xxs))
                 Text("Time comes from completed Focus Mode sessions. Days with no session have no recorded bar.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Spacer(Modifier.height(12.dp))
-        MetricCard(title = "ESTIMATION") {
+        Spacer(Modifier.height(VantaSpacing.md))
+        MetricCard(title = "Planning estimate") {
             val difference = summary.estimationDifferencePercent
             if (difference == null) {
                 Text("More completed focus data is needed for an estimate.", style = MaterialTheme.typography.bodyMedium)
@@ -112,16 +129,17 @@ internal fun AnalyticsScreen(
                 Text("Based on ${summary.estimationSampleCount} tasks with planned duration and Focus Mode sessions", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(VantaSpacing.md))
+    }
     }
 }
 
 @Composable
 private fun MetricCard(title: String, content: @Composable () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(10.dp))
+    VantaCard(tone = VantaCardTone.Subtle) {
+        Column(Modifier.fillMaxWidth().padding(VantaSpacing.md)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(VantaSpacing.xs))
             content()
         }
     }
@@ -158,7 +176,18 @@ private fun PlannedFocusedChart(points: List<AnalyticsDayPoint>) {
     val muted = MaterialTheme.colorScheme.outlineVariant
     val tickCount = if (points.size <= 7) points.size else points.size / 5
     val maxMinutes = (points.maxOfOrNull { maxOf(it.plannedMinutes, it.focusedMinutes ?: 0) } ?: 0).coerceAtLeast(1)
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+    val chartDescription = remember(points) {
+        points.joinToString(separator = ". ") { point ->
+            val day = point.date.format(DateTimeFormatter.ofPattern("EEEE, MMM d"))
+            val planned = formatMinutes(point.plannedMinutes)
+            val focused = point.focusedMinutes?.let(::formatMinutes) ?: "no focus recorded"
+            day + ": " + planned + " planned, " + focused + " focused"
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = chartDescription },
+        verticalAlignment = Alignment.Bottom,
+    ) {
         points.forEachIndexed { index, point ->
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 Canvas(Modifier.fillMaxWidth().height(96.dp).padding(horizontal = 1.dp)) {

@@ -80,11 +80,13 @@ import dev.system.app.ui.calendar.GoogleCalendarSettingsPanel
 import dev.system.app.ui.calendar.rememberGoogleCalendarUserAuthorization
 import dev.system.app.ui.planner.ai.PlanMyDayUiState
 import dev.system.app.ui.theme.VantaTheme
+import dev.system.app.widget.VantaWidgetRefresh
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -770,10 +772,24 @@ internal fun VantaRoot(
                                     }
                                 },
                                 onUpdatePreferences = { update ->
-                                    scope.launch { userPreferencesRepository.update(update) }
+                                    val previousTheme = preferences.theme
+                                    scope.launch {
+                                        userPreferencesRepository.update(update)
+                                        val updatedTheme = userPreferencesRepository.preferences.first().theme
+                                        if (updatedTheme != previousTheme) {
+                                            VantaWidgetRefresh.refreshAppearance(context)
+                                        }
+                                    }
                                 },
                                 onResetPreferences = {
-                                    scope.launch { userPreferencesRepository.reset() }
+                                    val previousTheme = preferences.theme
+                                    scope.launch {
+                                        userPreferencesRepository.reset()
+                                        val updatedTheme = userPreferencesRepository.preferences.first().theme
+                                        if (updatedTheme != previousTheme) {
+                                            VantaWidgetRefresh.refreshAppearance(context)
+                                        }
+                                    }
                                 },
                                 onSignOutFromSettings = ::signOut,
                                 todayCalendarBlocks = todayCalendarBlocks,

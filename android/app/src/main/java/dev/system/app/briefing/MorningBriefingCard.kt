@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -13,7 +12,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import dev.system.app.ui.components.VantaCard
+import dev.system.app.ui.components.VantaCardTone
+import dev.system.app.ui.theme.VantaSpacing
 import java.time.format.DateTimeFormatter
 
 /** A compact dashboard card; the host owns navigation and decides when to show it. */
@@ -24,38 +25,41 @@ internal fun MorningBriefingCard(
     modifier: Modifier = Modifier,
 ) {
     val locale = LocalLocale.current.platformLocale
-    Card(modifier = modifier.fillMaxWidth()) {
+    VantaCard(modifier = modifier.fillMaxWidth(), tone = VantaCardTone.Standard) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = VantaSpacing.md, vertical = VantaSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(VantaSpacing.xxs),
         ) {
-            Text("Good morning", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text(
                 briefing.date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", locale)),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
             )
 
             val itemLabel = if (briefing.scheduledItemCount == 1) "scheduled item" else "scheduled items"
             val habitLabel = if (briefing.habitCount == 1) "habit" else "habits"
-            Text("${briefing.scheduledItemCount} $itemLabel · ${briefing.habitCount} $habitLabel")
-
-            briefing.plannedMinutes?.let { minutes ->
-                Text("${formatDuration(minutes)} planned")
+            val importantTaskLabel = briefing.importantTaskCount?.let { count ->
+                if (count == 1) "$count important task" else "$count important tasks"
             }
+            val overview = buildList {
+                add("${briefing.scheduledItemCount} $itemLabel")
+                add("${briefing.habitCount} $habitLabel")
+                briefing.plannedMinutes?.let { add("${formatDuration(it)} planned") }
+                importantTaskLabel?.let { add(it) }
+            }.joinToString(" · ")
+            Text(
+                overview,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             briefing.firstItem?.let { first ->
                 val timing = if (first.allDay) "All day" else first.time?.format(
                     DateTimeFormatter.ofPattern("h:mm a", locale),
                 )
-                if (timing != null) {
-                    Text("First item: $timing · ${first.title}", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-
-            briefing.importantTaskCount?.let { count ->
-                val label = if (count == 1) "important task" else "important tasks"
-                Text("$count $label")
+                val firstItemText = timing?.let { "First item · $it · ${first.title}" }
+                    ?: "First item · ${first.title}"
+                Text(firstItemText, style = MaterialTheme.typography.bodyMedium)
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
