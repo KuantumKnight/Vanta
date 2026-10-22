@@ -31,8 +31,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import dev.system.app.ui.components.VantaCard
 import dev.system.app.ui.components.VantaCardTone
-import dev.system.app.ui.components.VantaSpacing
 import dev.system.app.ui.theme.VantaLayout
+import dev.system.app.ui.theme.VantaSpacing
 import java.time.format.DateTimeFormatter
 
 @Composable

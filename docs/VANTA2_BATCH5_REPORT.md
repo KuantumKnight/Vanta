@@ -82,17 +82,18 @@ The macrobenchmark and baseline-profile journey source now navigates Week/Habits
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Android Gradle compile | **FAIL — host setup** | `:app:compileDebugKotlin --no-daemon --stacktrace` stopped at `java.io.IOException: Unable to establish loopback connection`, before Gradle project configuration or Kotlin compilation. |
-| JVM tests, lint, debug/release APK, androidTest APK | **NOT RUN** | The Gradle initialization blocker prevents task configuration. |
-| Instrumentation / managed device | **NOT RUN** | No emulator/device attached; Android Gradle initialization is also blocked. |
-| Macrobenchmark / baseline profile | **NOT RUN** | No Android task configuration or device available. |
+| Hosted Android compile | **FAIL — first run** | Gradle configured successfully, then Kotlin compilation reported wrong imports for `VantaSpacing` in Analytics and `LocalHapticFeedback` in Focus. Both imports are corrected in the follow-up commit; hosted rerun is pending. |
+| JVM tests | **NOT RUN TO COMPLETION** | The `testDebugUnitTest` task reached `compileDebugKotlin` and stopped on those source errors before executing tests. |
+| Lint, debug/release APK, androidTest APK | **NOT RUN** | The Android job stops when its JVM test/build step fails. |
+| Instrumentation / managed device | **NOT RUN** | The sequential Android job stopped before APK compilation and managed-device launch. |
+| Macrobenchmark / baseline profile | **NOT RUN** | No benchmark/profile task is part of this release gate run. |
 | Deno shared tests | **PASS** | `deno test --config supabase/deno.json supabase/functions/_shared`: 34 passed, 0 failed. |
 | Deno function type checks | **PASS** | `deno check --config supabase/deno.json` for `mcp`, `expand-schedules`, `sync-push`, and `send-reminders` exited 0. |
 | Consent lint | **PASS** | `npm run lint` in `web/consent` exited 0. |
 | Consent site build | **PASS** | `npm run build` in `web/consent` exited 0. |
 | Diff whitespace check | **PASS** | `git diff --check` reported no whitespace errors; Git printed line-ending normalization notices for edited files. |
 
-The Android result is **not a source compilation result**. CI against the integrated Batch 5 revision has not been run, so Android CI status is **FAIL locally / hosted CI unverified**.
+The previous local Gradle attempt remains blocked before project configuration by the Windows selector/loopback issue. Hosted CI did compile the source and exposed two import errors; they were corrected after the first run. The follow-up hosted result determines the final Android CI status.
 
 ## Known Limitations
 
@@ -112,8 +113,8 @@ None. The workspace had no attached Android device or emulator, so Today light/d
 
 ```text
 Batch 5 implementation: PARTIAL
-Android CI: FAIL locally before project configuration; hosted CI unverified
-Instrumentation: FAIL / not run (no device and Gradle host blocker)
+Android CI: FAIL on the first hosted run; import fixes applied, rerun pending
+Instrumentation: NOT RUN (Android job stopped before instrumentation APK/device launch)
 Performance regression: NOT MEASURED
 Accessibility review: PARTIAL
 Known blockers: Windows Gradle selector/loopback initialization; no attached emulator/device; no general task update mutation for task detail editing
