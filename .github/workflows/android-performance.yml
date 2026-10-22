@@ -59,6 +59,13 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Install Android emulator runtime dependency
+        timeout-minutes: 5
+        run: |
+          timeout 240s sudo apt-get update
+          timeout 180s sudo apt-get install --yes libpulse0
+          ldconfig -p | grep -F 'libpulse.so.0'
+
       - name: Create and boot API 36 emulator
         timeout-minutes: 12
         run: |
