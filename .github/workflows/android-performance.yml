@@ -125,7 +125,7 @@ jobs:
       - name: Generate release-like Baseline Profile
         timeout-minutes: 20
         working-directory: android
-        run: timeout 19m bash ./gradlew --no-daemon :app:generateBenchmarkBaselineProfile
+        run: timeout 19m bash ./gradlew --no-daemon :app:generateReleaseBaselineProfile
 
       - name: Assemble release-like profileable target
         timeout-minutes: 20
