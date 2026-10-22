@@ -48,6 +48,7 @@ class SystemApplication : Application() {
                 SystemDatabase.MIGRATION_5_6,
                 SystemDatabase.MIGRATION_6_7,
                 SystemDatabase.MIGRATION_7_8,
+                SystemDatabase.MIGRATION_8_9,
             )
             .build()
         userPreferencesRepository = DataStoreUserPreferencesRepository(this)

@@ -90,6 +90,17 @@ data class PendingMutation(
     val earliestStart: String? = null,
     val latestEnd: String? = null,
     val preferredStart: String? = null,
+    val targetTaskId: String? = null,
+    @ColumnInfo(defaultValue = "0") val updateTitle: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val updateNotes: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val updateSchedule: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val updateDuration: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val updateScheduleType: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val updatePriority: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val updateDeadlineAt: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val updateEarliestStart: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val updateLatestEnd: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val updatePreferredStart: Boolean = false,
 )
 
 @Entity(tableName = "sync_checkpoints")

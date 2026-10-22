@@ -1,7 +1,7 @@
 # Vanta 2 Batch 5 Performance and Accessibility Review
 
 Date: 2026-10-22 | Branch: vanta2-batch3-batch4-integration
-Status: PARTIAL — source review and benchmark journey updates are complete; Android runtime and benchmark verification are unavailable on this host.
+Status: NOT MEASURED — source review and benchmark journey updates are complete; hosted Android builds do not provide startup/frame measurements, and no local emulator or device was available for benchmark runs.
 
 ## Baseline
 
@@ -14,7 +14,7 @@ The pre-Batch 5 baseline is the integrated Batch 3/4 source, reviewed in docs/VA
 - Upcoming/search observed the full pending occurrence list for the owner without a SQL limit.
 - Macrobenchmark and Baseline Profile source existed, but no measurements had run.
 
-There is no numeric before measurement. The parent verification attempt of `:app:compileDebugKotlin --no-daemon --stacktrace` failed in Windows Java selector/loopback initialization with `java.io.IOException: Unable to establish loopback connection`, before Gradle project configuration; no Kotlin compilation occurred. `adb devices -l` is empty, so emulator instrumentation and benchmark tasks did not run.
+There is no numeric before measurement. The local verification attempt of `:app:compileDebugKotlin --no-daemon --stacktrace` failed in Windows Java selector/loopback initialization with `java.io.IOException: Unable to establish loopback connection`, before Gradle project configuration; no local Kotlin compilation occurred. Hosted Android release CI passed on checkpoint `39714036235`; final post-editor CI is tracked in [VANTA2_BATCH5_REPORT.md](VANTA2_BATCH5_REPORT.md). `adb devices -l` is empty, so local screenshot and benchmark tasks did not run.
 
 ## Changes reviewed
 
@@ -58,17 +58,18 @@ A source comparison of inline dp literals in the edited main screens found fewer
 
 The existing Macrobenchmark and Baseline Profile journeys now navigate Week and Habits directly and open Upcoming/Goals through More. They return to Today and open/dismiss Quick Capture without creating task data. Dashboard-only interactions are skipped when the Today tab is absent, so fresh sign-in runs do not fabricate account state.
 
-Task opening/completion is not included: this repository has no task detail/edit mutation or stable seeded benchmark fixture. A completion journey should use a disposable test account and controlled fixture rather than mutate a user's existing task.
+Task Detail/Edit now exists and its source/Compose tests cover opening and editing, but the macrobenchmark journey does not open it. There is no stable signed-in seeded benchmark fixture. A completion or edit journey should use a disposable test account and controlled fixture rather than mutate a user's existing task.
 
 ## Measurement results
 
 | Measurement | Baseline | Batch 5 | Status |
 |---|---:|---:|---|
-| Cold startup | Not measured | Not measured | Blocked before Gradle configuration |
-| Warm startup | Not measured | Not measured | Blocked before Gradle configuration |
+| Cold startup | Not measured | Not measured | Local Gradle failed before configuration; no benchmark device |
+| Warm startup | Not measured | Not measured | Local Gradle failed before configuration; no benchmark device |
 | Today scroll frame timing | Not measured | Not measured | No attached emulator/device |
 | Week/Habits navigation timing | Not measured | Not measured | No attached emulator/device |
 | Quick Capture open/dismiss timing | Not measured | Not measured | No attached emulator/device |
+| Task Detail/Edit open timing | Not measured | Not measured | Not in macrobenchmark journey; no seeded device fixture |
 | Generated Baseline Profile | None recorded | Not generated | Device profile task not run |
 
 The benchmark source requests five iterations for startup and frame timing, but it has not produced any measurements. ADB returned no connected device. Do not interpret the source changes as proof that startup or scrolling has no regression.
@@ -82,7 +83,7 @@ The benchmark source requests five iterations for startup and frame timing, but 
 - Startup still creates Room and the repository, initializes DataStore, creates notification channels, and schedules/collects notification and sync work in `SystemApplication.onCreate`; only optional Calendar and AI clients are lazy. Their startup cost has not been measured.
 - Timeline overlap analysis remains proportional to the number of scheduled tasks; there is no minute-by-task rendering grid. Busy-day UI cost has not been profiled.
 - Widget refresh remains local and event-driven. Device widget resize and AppWidget update cost were not measured.
-- The local Gradle blocker and missing emulator prevent compilation, lint, instrumentation, Macrobenchmark, managed-device runs, and baseline-profile generation. CI/device is still required to confirm compilation and regressions.
+- The local Gradle blocker and missing emulator prevent local compilation, lint, instrumentation, Macrobenchmark, and baseline-profile generation. Hosted Android CI confirms compilation and managed-device tests, but does not provide performance measurements.
 
 ## Accessibility review
 
@@ -93,6 +94,7 @@ Source-level improvements:
 - Timeline drag exposes current movement text, keeps the explicit time-picker alternative, and adds confirmation/rejection haptics.
 - Focus and habit detail can scroll; Settings and Analytics constrain long content on expanded widths. Widget Add controls are labeled.
 - Reduced motion follows Android's animator-duration setting for the Focus progress transition. Existing Material controls continue to use system touch feedback.
+- The shared Task Detail sheet gives its title heading semantics, exposes selected field values in picker descriptions, announces validation/save errors politely, and has a Compose test that scrolls long notes at 1.8× font scale. Week schedule blocks expose button role and action semantics. These are source/test checks, not manual TalkBack or contrast certification.
 - Offline and error copy remains available while routine sync timestamps are removed.
 
 Not verified on device:
@@ -104,9 +106,9 @@ Not verified on device:
 
 ## Remaining risks and next checks
 
-1. Run the Android release gate and instrumentation on working Linux CI or an Android host; record actual pass/fail output.
+1. Record final post-editor Android release CI and instrumentation results in the Batch 5 report.
 2. Run cold/warm startup and frame-timing Macrobenchmarks on a representative physical device and compare distributions to the Batch 3/4 baseline.
-3. Generate and archive the Baseline Profile from a signed-in seeded test account; add a controlled task completion journey only with disposable fixture data.
+3. Generate and archive the Baseline Profile from a signed-in seeded test account; add controlled Task Detail/Edit and completion journeys only with disposable fixture data.
 4. Test light/dark contrast, TalkBack, font scale, compact phone, expanded width, and landscape on device.
 5. Revisit pending-list paging and root state isolation only if measured account sizes/recomposition profiles show a need.
 

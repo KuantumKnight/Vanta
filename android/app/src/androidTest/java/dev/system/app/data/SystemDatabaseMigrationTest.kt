@@ -48,6 +48,7 @@ class SystemDatabaseMigrationTest {
                 SystemDatabase.MIGRATION_5_6,
                 SystemDatabase.MIGRATION_6_7,
                 SystemDatabase.MIGRATION_7_8,
+                SystemDatabase.MIGRATION_8_9,
             )
             .build()
         try {
@@ -109,6 +110,7 @@ class SystemDatabaseMigrationTest {
                 SystemDatabase.MIGRATION_5_6,
                 SystemDatabase.MIGRATION_6_7,
                 SystemDatabase.MIGRATION_7_8,
+                SystemDatabase.MIGRATION_8_9,
             )
             .build()
         try {
@@ -163,6 +165,7 @@ class SystemDatabaseMigrationTest {
                 SystemDatabase.MIGRATION_5_6,
                 SystemDatabase.MIGRATION_6_7,
                 SystemDatabase.MIGRATION_7_8,
+                SystemDatabase.MIGRATION_8_9,
             )
             .build()
         try {
@@ -191,7 +194,7 @@ class SystemDatabaseMigrationTest {
         createVersionSixFixture(context, name)
 
         val migrated = Room.databaseBuilder(context, SystemDatabase::class.java, name)
-            .addMigrations(SystemDatabase.MIGRATION_6_7, SystemDatabase.MIGRATION_7_8)
+            .addMigrations(SystemDatabase.MIGRATION_6_7, SystemDatabase.MIGRATION_7_8, SystemDatabase.MIGRATION_8_9)
             .build()
         try {
             val dao = migrated.systemDao()
@@ -203,6 +206,8 @@ class SystemDatabaseMigrationTest {
             assertEquals("mutation-v6", queued.operationId)
             assertEquals("occurrence-v6", queued.targetOccurrenceId)
             assertNull(queued.scheduleType)
+            assertNull(queued.targetTaskId)
+            assertTrue(!queued.updateTitle && !queued.updateNotes && !queued.updateSchedule)
             val history = migrated.openHelper.writableDatabase.query(
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('occurrence_history', 'focus_session_history', 'daily_reviews', 'pending_habit_skips')",
             )
@@ -288,7 +293,7 @@ class SystemDatabaseMigrationTest {
         legacy.close()
 
         val migrated = Room.databaseBuilder(context, SystemDatabase::class.java, name)
-            .addMigrations(SystemDatabase.MIGRATION_7_8)
+            .addMigrations(SystemDatabase.MIGRATION_7_8, SystemDatabase.MIGRATION_8_9)
             .build()
         try {
             val dao = migrated.systemDao()
@@ -402,6 +407,7 @@ class SystemDatabaseMigrationTest {
                 SystemDatabase.MIGRATION_5_6,
                 SystemDatabase.MIGRATION_6_7,
                 SystemDatabase.MIGRATION_7_8,
+                SystemDatabase.MIGRATION_8_9,
             )
             .build()
         try {

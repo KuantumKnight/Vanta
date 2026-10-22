@@ -24,6 +24,7 @@ internal fun UpcomingScreen(
     today: LocalDate,
     searchActive: Boolean,
     onComplete: (CachedOccurrence) -> Unit,
+    onOpenTask: (CachedOccurrence) -> Unit = {},
 ) {
     if (dated.isEmpty() && unscheduled.isEmpty()) {
         EmptyState(
@@ -46,12 +47,12 @@ internal fun UpcomingScreen(
                     else date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")).uppercase()
                     SectionHeading(label, tasks.size.toString() + " task" + if (tasks.size == 1) "" else "s")
                 }
-                items(tasks, key = { it.id }) { TaskCard(it, onComplete) }
+                items(tasks, key = { it.id }) { TaskCard(it, onComplete, onOpenTask) }
             }
         }
         if (unscheduled.isNotEmpty()) {
             item(key = "no-date-heading") { SectionHeading("NO DATE", unscheduled.size.toString() + " task" + if (unscheduled.size == 1) "" else "s") }
-            items(unscheduled, key = { it.id }) { TaskCard(it, onComplete) }
+            items(unscheduled, key = { it.id }) { TaskCard(it, onComplete, onOpenTask) }
         }
     }
 }

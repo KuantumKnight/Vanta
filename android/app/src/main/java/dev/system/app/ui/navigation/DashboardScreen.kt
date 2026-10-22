@@ -59,6 +59,7 @@ import dev.system.app.planner.FlexibleTask
 import dev.system.app.planner.PlanProposal
 import dev.system.app.planner.PlanningContext
 import dev.system.app.planner.ScheduleBlock
+import dev.system.app.planner.ScheduleSource
 import dev.system.app.planner.ScheduleConflict
 import dev.system.app.planner.conflicts.detectScheduleConflicts
 import dev.system.app.planner.conflicts.findConflictAlternatives
@@ -95,6 +96,7 @@ import dev.system.app.ui.goals.GoalsScreen
 import dev.system.app.ui.quickcapture.QuickCaptureLaunchRequest
 import dev.system.app.ui.quickcapture.QuickCaptureSubmission
 import dev.system.app.ui.quickcapture.QuickCaptureSheet
+import dev.system.app.ui.taskdetail.TaskDetailSheet
 import dev.system.app.ui.settings.SettingsScreen
 import dev.system.app.settings.UserPreferences
 import dev.system.app.ui.today.TodayScreen
@@ -175,6 +177,8 @@ internal fun DashboardScreen(
     onRetryGoals: () -> Unit,
     onDismissCompletion: (String) -> Unit,
     onComplete: (CachedOccurrence) -> Unit,
+    onSaveTask: suspend (CachedOccurrence, QuickCaptureSubmission) -> Unit = { _, _ -> },
+    canEditTask: suspend (CachedOccurrence) -> Boolean = { row -> row.kind == "task" && row.status == "pending" },
     onCreateTask: (QuickCaptureSubmission) -> Unit = {},
     onReschedule: (CachedOccurrence, Instant) -> Unit = { _, _ -> },
     onStartFocus: (CachedOccurrence) -> Unit = {},
@@ -196,6 +200,7 @@ internal fun DashboardScreen(
     plannerWeekStart: LocalDate = weekDateRange(LocalDate.now(TaskTimeZone), userPreferences.weekStartDay).startInclusive,
     plannerSchedulesByDate: Map<LocalDate, DaySchedule> = emptyMap(),
     plannerFlexibleTasks: List<FlexibleTask> = emptyList(),
+    plannerWeekOccurrences: List<CachedOccurrence> = emptyList(),
     onPlannerWeekChanged: (LocalDate) -> Unit = {},
     onPlannerSelectDay: (LocalDate) -> Unit = {},
     onPlannerInspectBlock: (ScheduleBlock) -> Unit = {},
@@ -223,6 +228,7 @@ internal fun DashboardScreen(
     var reviewRescheduleRow by remember { mutableStateOf<CachedOccurrence?>(null) }
     var rescheduleInitialDate by remember { mutableStateOf<LocalDate?>(null) }
     var inspectedWeekBlock by remember { mutableStateOf<ScheduleBlock?>(null) }
+    var selectedTaskDetail by remember { mutableStateOf<CachedOccurrence?>(null) }
     var dismissedConflictKeys by remember(today) { mutableStateOf<Set<String>>(emptySet()) }
     var briefingDismissedForToday by remember(today) { mutableStateOf(false) }
     LaunchedEffect(quickCaptureRequest?.token) {
@@ -299,6 +305,7 @@ internal fun DashboardScreen(
                         emptyTitle = if (search.isBlank()) "Nothing due today" else "No matching tasks",
                         emptyBody = if (search.isBlank()) "Add a task to start shaping your day." else "Try a different word.",
                         onComplete = onComplete,
+                        onOpenTask = { selectedTaskDetail = it },
                         onReschedule = onReschedule,
                         onStartFocus = onStartFocus,
                         snapIntervalMinutes = userPreferences.snapIntervalMinutes,
@@ -408,8 +415,15 @@ internal fun DashboardScreen(
                         onPlannerSelectDay(date)
                     },
                     onInspectBlock = { block ->
-                        onPlannerInspectBlock(block)
-                        inspectedWeekBlock = block
+                        val row = if (block.source == ScheduleSource.GOOGLE_CALENDAR) null
+                        else plannerWeekOccurrences.firstOrNull { it.id == block.id }
+                        if (row != null) {
+                            inspectedWeekBlock = null
+                            selectedTaskDetail = row
+                        } else {
+                            onPlannerInspectBlock(block)
+                            inspectedWeekBlock = block
+                        }
                     },
                     onReschedule = { block ->
                         onPlannerRescheduleBlock(block)
@@ -425,6 +439,9 @@ internal fun DashboardScreen(
                             rescheduleInitialDate = date
                             reviewRescheduleRow = row
                         }
+                    },
+                    onOpenFlexibleTask = { task ->
+                        plannerWeekOccurrences.firstOrNull { it.id == task.occurrenceId }?.let { selectedTaskDetail = it }
                     },
                     onQuickCapture = { date ->
                         quickCaptureDate = date
@@ -443,6 +460,7 @@ internal fun DashboardScreen(
                     today = today,
                     searchActive = search.isNotBlank(),
                     onComplete = onComplete,
+                    onOpenTask = { selectedTaskDetail = it },
                 )
             }
             DashboardTab.Goals -> {
@@ -612,6 +630,17 @@ internal fun DashboardScreen(
                 )
             },
             confirmButton = { TextButton(onClick = { inspectedWeekBlock = null }) { Text("Close") } },
+        )
+    }
+
+    selectedTaskDetail?.let { row ->
+        TaskDetailSheet(
+            row = row,
+            canEditTask = canEditTask,
+            onDismiss = { selectedTaskDetail = null },
+            onSave = onSaveTask,
+            onComplete = { task -> selectedTaskDetail = null; onComplete(task) },
+            onStartFocus = { task -> selectedTaskDetail = null; onStartFocus(task) },
         )
     }
 }

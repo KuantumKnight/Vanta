@@ -343,6 +343,50 @@ interface SystemDao {
         return true
     }
 
+    /** Atomically revalidates ownership/state, stores the update outbox row, and applies its optimistic image. */
+    @Transaction
+    suspend fun storeTaskUpdateMutation(
+        item: PendingMutation,
+        expected: CachedOccurrence,
+        optimistic: CachedOccurrence,
+    ): Boolean {
+        val occurrenceId = item.targetOccurrenceId ?: return false
+        val taskId = item.targetTaskId ?: return false
+        if (item.userId.isBlank() || item.operationType != "update_task" || item.localOccurrenceId != null ||
+            item.serverOccurrenceId != null || occurrenceId.startsWith("local:") || taskId.startsWith("local:") ||
+            !item.hasTaskUpdateFields()
+        ) return false
+        val current = occurrence(item.userId, occurrenceId) ?: return false
+        if (current != expected || current.id != occurrenceId || current.taskId != taskId ||
+            current.userId != item.userId || optimistic.userId != item.userId || optimistic.id != current.id ||
+            optimistic.taskId != current.taskId || current.kind != "task" || current.status != "pending" ||
+            hasQueuedCompletion(item.userId, occurrenceId) || hasPendingMutationForOccurrence(item.userId, occurrenceId)
+        ) return false
+
+        val expectedOptimistic = current.copy(
+            title = if (item.updateTitle) item.title ?: return false else current.title,
+            notes = if (item.updateNotes) item.notes else current.notes,
+            scheduledFor = if (item.updateSchedule) item.scheduledFor ?: return false else current.scheduledFor,
+            allDay = if (item.updateSchedule) item.allDay ?: return false else current.allDay,
+            durationMinutes = if (item.updateDuration) item.durationMinutes else current.durationMinutes,
+            scheduleType = when {
+                item.updateScheduleType -> item.scheduleType ?: return false
+                item.updateSchedule && current.scheduleType == "FLEXIBLE" -> "SOFT"
+                else -> current.scheduleType
+            },
+            priority = if (item.updatePriority) item.priority ?: return false else current.priority,
+            deadlineAt = if (item.updateDeadlineAt) item.deadlineAt else current.deadlineAt,
+            earliestStart = if (item.updateEarliestStart) item.earliestStart else current.earliestStart,
+            latestEnd = if (item.updateLatestEnd) item.latestEnd else current.latestEnd,
+            preferredStart = if (item.updatePreferredStart) item.preferredStart else current.preferredStart,
+        )
+        if (optimistic != expectedOptimistic) return false
+
+        insertPendingMutation(item.copy(queueOrder = nextMutationQueueOrder()))
+        replaceOccurrences(listOf(optimistic))
+        return true
+    }
+
     /** Queue an approved multi-item proposal as one local transaction. */
     @Transaction
     suspend fun storeRescheduleMutations(items: List<PendingMutation>, occurrences: List<CachedOccurrence>): Boolean {
@@ -548,6 +592,22 @@ interface SystemDao {
     }
 
     @Transaction
+    suspend fun reconcileTaskUpdatedOccurrence(userId: String, operationId: String, canonical: CachedOccurrence): Boolean {
+        val mutation = pendingMutation(userId, operationId) ?: return false
+        if (mutation.operationType != "update_task" || mutation.targetOccurrenceId != canonical.id ||
+            mutation.targetTaskId != canonical.taskId || canonical.userId != userId
+        ) return false
+        if (
+            !hasOtherPendingMutationForOccurrence(userId, canonical.id, operationId) &&
+            !hasQueuedCompletion(userId, canonical.id)
+        ) {
+            replaceOccurrences(listOf(canonical))
+        }
+        deletePendingMutation(userId, operationId)
+        return true
+    }
+
+    @Transaction
     suspend fun clearSyncState(userId: String) {
         clearCheckpoint(userId)
         clearStagedOccurrences(userId)
@@ -642,9 +702,13 @@ data class OccurrenceDelta(
     val occurrence: CachedOccurrence?,
 )
 
+private fun PendingMutation.hasTaskUpdateFields(): Boolean = updateTitle || updateNotes || updateSchedule ||
+    updateDuration || updateScheduleType || updatePriority || updateDeadlineAt || updateEarliestStart ||
+    updateLatestEnd || updatePreferredStart
+
 @Database(
     entities = [CachedOccurrence::class, PendingCompletion::class, PendingMutation::class, SyncCheckpoint::class, BootstrapOccurrence::class, PendingFocusReconciliation::class, OccurrenceHistory::class, FocusSessionHistory::class, DailyReviewEntry::class, PendingHabitSkip::class],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class SystemDatabase : RoomDatabase() {
@@ -860,6 +924,120 @@ abstract class SystemDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE bootstrap_occurrences ADD COLUMN latestEnd TEXT")
                 db.execSQL("ALTER TABLE bootstrap_occurrences ADD COLUMN preferredStart TEXT")
                 db.execSQL("UPDATE bootstrap_occurrences SET scheduleType = 'FLEXIBLE' WHERE scheduledFor IS NULL")
+            }
+        }
+
+        /** Add typed update payload ownership and widen the outbox constraint without dropping queued work. */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE pending_mutations_v9 (
+                      operationId TEXT NOT NULL PRIMARY KEY,
+                      userId TEXT NOT NULL,
+                      operationType TEXT NOT NULL,
+                      queueOrder INTEGER NOT NULL,
+                      queuedAt INTEGER NOT NULL,
+                      state TEXT NOT NULL DEFAULT 'queued',
+                      retryCount INTEGER NOT NULL DEFAULT 0,
+                      lastAttemptAt INTEGER,
+                      nextAttemptAt INTEGER NOT NULL DEFAULT 0,
+                      lastErrorCode TEXT,
+                      lastError TEXT,
+                      localOccurrenceId TEXT,
+                      serverOccurrenceId TEXT,
+                      targetOccurrenceId TEXT,
+                      title TEXT,
+                      notes TEXT,
+                      scheduledFor TEXT,
+                      allDay INTEGER,
+                      durationMinutes INTEGER,
+                      scheduleType TEXT,
+                      priority TEXT,
+                      deadlineAt TEXT,
+                      earliestStart TEXT,
+                      latestEnd TEXT,
+                      preferredStart TEXT,
+                      targetTaskId TEXT,
+                      updateTitle INTEGER NOT NULL DEFAULT 0,
+                      updateNotes INTEGER NOT NULL DEFAULT 0,
+                      updateSchedule INTEGER NOT NULL DEFAULT 0,
+                      updateDuration INTEGER NOT NULL DEFAULT 0,
+                      updateScheduleType INTEGER NOT NULL DEFAULT 0,
+                      updatePriority INTEGER NOT NULL DEFAULT 0,
+                      updateDeadlineAt INTEGER NOT NULL DEFAULT 0,
+                      updateEarliestStart INTEGER NOT NULL DEFAULT 0,
+                      updateLatestEnd INTEGER NOT NULL DEFAULT 0,
+                      updatePreferredStart INTEGER NOT NULL DEFAULT 0,
+                      CHECK (queueOrder > 0),
+                      CHECK (state IN ('queued', 'terminal')),
+                      CHECK (retryCount >= 0),
+                      CHECK (nextAttemptAt >= 0),
+                      CHECK (updateTitle IN (0, 1)),
+                      CHECK (updateNotes IN (0, 1)),
+                      CHECK (updateSchedule IN (0, 1)),
+                      CHECK (updateDuration IN (0, 1)),
+                      CHECK (updateScheduleType IN (0, 1)),
+                      CHECK (updatePriority IN (0, 1)),
+                      CHECK (updateDeadlineAt IN (0, 1)),
+                      CHECK (updateEarliestStart IN (0, 1)),
+                      CHECK (updateLatestEnd IN (0, 1)),
+                      CHECK (updatePreferredStart IN (0, 1)),
+                      CHECK (
+                        (operationType = 'create_task' AND localOccurrenceId IS NOT NULL
+                          AND targetOccurrenceId IS NULL AND targetTaskId IS NULL AND title IS NOT NULL AND title <> ''
+                          AND allDay IS NOT NULL AND (allDay = 0 OR scheduledFor IS NOT NULL)
+                          AND (durationMinutes IS NULL OR durationMinutes BETWEEN 5 AND 1440)
+                          AND updateTitle = 0 AND updateNotes = 0 AND updateSchedule = 0 AND updateDuration = 0
+                          AND updateScheduleType = 0 AND updatePriority = 0 AND updateDeadlineAt = 0
+                          AND updateEarliestStart = 0 AND updateLatestEnd = 0 AND updatePreferredStart = 0)
+                        OR
+                        (operationType = 'reschedule_occurrence' AND targetOccurrenceId IS NOT NULL
+                          AND localOccurrenceId IS NULL AND serverOccurrenceId IS NULL AND targetTaskId IS NULL
+                          AND scheduledFor IS NOT NULL AND title IS NULL AND notes IS NULL AND allDay IS NULL
+                          AND durationMinutes IS NULL AND updateTitle = 0 AND updateNotes = 0 AND updateSchedule = 0
+                          AND updateDuration = 0 AND updateScheduleType = 0 AND updatePriority = 0
+                          AND updateDeadlineAt = 0 AND updateEarliestStart = 0 AND updateLatestEnd = 0
+                          AND updatePreferredStart = 0)
+                        OR
+                        (operationType = 'update_task' AND targetOccurrenceId IS NOT NULL
+                          AND targetOccurrenceId NOT LIKE 'local:%' AND targetTaskId IS NOT NULL
+                          AND targetTaskId NOT LIKE 'local:%' AND localOccurrenceId IS NULL AND serverOccurrenceId IS NULL
+                          AND ((updateTitle = 1 AND title IS NOT NULL AND title <> '') OR (updateTitle = 0 AND title IS NULL))
+                          AND ((updateNotes = 1) OR (updateNotes = 0 AND notes IS NULL))
+                          AND ((updateSchedule = 1 AND scheduledFor IS NOT NULL AND allDay IS NOT NULL)
+                            OR (updateSchedule = 0 AND scheduledFor IS NULL AND allDay IS NULL))
+                          AND ((updateDuration = 1) OR (updateDuration = 0 AND durationMinutes IS NULL))
+                          AND ((updateScheduleType = 1 AND scheduleType IN ('HARD', 'SOFT', 'FLEXIBLE'))
+                            OR (updateScheduleType = 0 AND scheduleType IS NULL))
+                          AND ((updatePriority = 1 AND priority IN ('LOW', 'NORMAL', 'HIGH'))
+                            OR (updatePriority = 0 AND priority IS NULL))
+                          AND ((updateDeadlineAt = 1) OR (updateDeadlineAt = 0 AND deadlineAt IS NULL))
+                          AND ((updateEarliestStart = 1) OR (updateEarliestStart = 0 AND earliestStart IS NULL))
+                          AND ((updateLatestEnd = 1) OR (updateLatestEnd = 0 AND latestEnd IS NULL))
+                          AND ((updatePreferredStart = 1) OR (updatePreferredStart = 0 AND preferredStart IS NULL))
+                          AND (updateTitle = 1 OR updateNotes = 1 OR updateSchedule = 1 OR updateDuration = 1
+                            OR updateScheduleType = 1 OR updatePriority = 1 OR updateDeadlineAt = 1
+                            OR updateEarliestStart = 1 OR updateLatestEnd = 1 OR updatePreferredStart = 1))
+                      )
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO pending_mutations_v9 (
+                      operationId, userId, operationType, queueOrder, queuedAt, state, retryCount, lastAttemptAt,
+                      nextAttemptAt, lastErrorCode, lastError, localOccurrenceId, serverOccurrenceId,
+                      targetOccurrenceId, title, notes, scheduledFor, allDay, durationMinutes, scheduleType,
+                      priority, deadlineAt, earliestStart, latestEnd, preferredStart
+                    )
+                    SELECT operationId, userId, operationType, queueOrder, queuedAt, state, retryCount, lastAttemptAt,
+                      nextAttemptAt, lastErrorCode, lastError, localOccurrenceId, serverOccurrenceId,
+                      targetOccurrenceId, title, notes, scheduledFor, allDay, durationMinutes, scheduleType,
+                      priority, deadlineAt, earliestStart, latestEnd, preferredStart
+                    FROM pending_mutations
+                """.trimIndent())
+                db.execSQL("DROP TABLE pending_mutations")
+                db.execSQL("ALTER TABLE pending_mutations_v9 RENAME TO pending_mutations")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_pending_mutations_userId_state_nextAttemptAt_queueOrder ON pending_mutations(userId, state, nextAttemptAt, queueOrder)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_pending_mutations_queueOrder ON pending_mutations(queueOrder)")
             }
         }
     }

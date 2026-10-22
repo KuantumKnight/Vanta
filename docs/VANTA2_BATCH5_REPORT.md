@@ -1,122 +1,95 @@
 # Vanta 2 Batch 5 Report
 
 Date: 2026-10-22 | Branch: `vanta2-batch3-batch4-integration`
-Batch status: **PARTIAL**
 
-## Executive Summary
+## Summary
 
-Batch 5 establishes a shared Vanta design system and applies a first polish pass across Today, navigation, Week, Habits, Analytics, Settings, Focus, Quick Capture, widgets, and daily notifications. Existing planner, calendar, AI proposal, offline completion, and notification scheduling paths were preserved by source review. No database schema, migration, security policy, or planner algorithm was changed.
+Batch 5 delivers the shared Vanta design system and the premium-experience pass across Today, navigation, Week, Habits, Analytics, Settings, Focus, Quick Capture, widgets, and notifications. It now also includes one-off task detail and editing from Today and Week, backed by the existing authenticated task-update RPC and the durable Room mutation queue.
 
-The batch is partial because Android compilation and runtime acceptance could not be completed here. The Gradle wrapper fails during Windows Java selector/loopback initialization, before project configuration, and `adb devices -l` found no attached device or emulator. There are no screenshots or measured startup/frame results. A dedicated task detail/edit flow also remains absent: the app repository has no task-field update mutation, and adding one would change product/data behavior beyond this UI polish pass.
+The task editor queues its sparse typed patch and optimistic Room image in one transaction. A Room v8→v9 migration adds update-specific payload and field-presence columns while preserving queued legacy mutations. Delta/bootstrap overlays continue to protect pending local changes. Replay uses the stable operation ID with `mcp_update_task_with_scheduling`, then replaces the optimistic row from an owner-scoped canonical read. No Supabase schema, RPC, grant, RLS policy, MCP tool, or planner algorithm was changed.
 
-## Design System
+## Implementation
 
-- Added semantic light/dark colors, typography roles, spacing, shape, elevation, icon, layout, timeline, and motion tokens.
-- Added small reusable card, section header, chip, and empty-state components on top of the existing Material 3 stack.
-- Kept the stored System, Light, and Dark preference. Focus animation consults Android's animator-duration setting; changing the appearance preference re-renders installed widgets using their saved preference.
-- Migrated the main edited screens toward shared values. A source count of inline `dp` literals fell in Dashboard (8→6), TodayTimeline (39→4), Quick Capture (8→1), Week (32→16), Habits (33→17), Analytics (25→12), and Settings (8→2). This measures token adoption only, not UI quality or runtime performance.
+**PARTIAL** — the requested product work is implemented and hosted CI is the acceptance gate for Android compilation and instrumentation. Source and automated test coverage do not replace visual review, device accessibility checks, or performance measurements; those remain unavailable.
 
-See [VANTA2_DESIGN_SYSTEM.md](VANTA2_DESIGN_SYSTEM.md).
+The shared design system adds semantic colors, typography, spacing, shapes, elevation, icons, layout, timeline, and motion tokens plus reusable card, section-header, chip, and empty-state components. Navigation uses Today, Week, and Habits as primary destinations, with Upcoming, Goals, Analytics, Review, and Settings in More. Existing planning, calendar, AI proposal, offline completion, notification scheduling, widget completion, and focus flows were preserved by source review.
 
-## Today
+Today schedule projections are memoized across minute ticks. `TodayTimeline` still observes the minute clock at its parent and recomposes LazyColumn content on each tick; this isolates the expensive projection calculation but does not establish a frame-time improvement. The existing SOFT-only drag rule, snap/overlap checks, and time-picker alternative remain.
 
-- Changed the eight-peer destination strip to three primary destinations—Today, Week, and Habits—with Upcoming, Goals, Analytics, Review, and Settings in More.
-- Removed routine healthy-sync timestamp clutter while retaining actionable sync errors, active state, offline messaging, and queued completion recovery. The sync action is available from Account settings.
-- Replaced the ChatGPT-specific empty-day direction with in-app task language.
-- Kept the task/calendar display and day-plan projections stable across minute ticks, so overlap and free-time calculations do not repeat each minute. `TodayTimeline` still observes the minute clock at its parent level and recomposes its LazyColumn content; only the expensive schedule projection recalculation was isolated.
-- Improved timeline semantics, movement feedback, and reschedule haptics while keeping the existing SOFT-only drag rule, snap/overlap checks, time-picker alternative, and callback path.
-- Applied shared presentation tokens to Quick Capture; its parsing, validation, and submission path are unchanged.
-- Existing conflict resolution and AI plan proposal/preview/apply surfaces remain in place; their semantics were not redesigned in this batch.
+## Task Detail/Edit
 
-**Not delivered:** a dedicated task detail/edit experience. Existing task flows do not expose a general task-field update mutation for title, notes, priority, deadline, or recurrence. No fake local-only editor was added.
+**PASS** — Today and Week task rows open one shared detail sheet. The sheet opens in a read-only summary and offers a separate Edit mode for eligible tasks. The editor supports title, notes, date/time and all-day scheduling, duration, schedule type, priority, and deadline. It reuses the existing Quick Capture validator, applies a local optimistic update, queues sync without waiting for the network, and closes after the local save. Dirty edits prompt before discard. Focus and Complete actions remain available for pending tasks.
 
-## Week
+Only pending, server-backed, one-off task occurrences can be edited. Habits, completed tasks, local-created tasks awaiting initial sync, and tasks with another queued mutation or completion are read-only. Recurring habit occurrences are not rewritten as one-off tasks. Flexible tasks can be scheduled; the existing RPC does not support reverting a scheduled task to Flexible, and the editor explains this constraint. Placement-window fields (`earliest_start`, `latest_end`, `preferred_start`) and reminders are not exposed in this editor.
 
-- Added explicit selected-day accessibility state, improved date labeling, and adjusted fixed dimensions toward adaptive layouts.
-- Kept the existing selected-day schedule, inspect, reschedule, and flexible-task flows.
-- Source review found week-range task queries remain bounded. Phone/tablet and large-font appearance were not runtime checked.
+## Offline Task Editing
 
-## Habits
+**PASS** — validation, patch construction, durable queue insertion, and optimistic row replacement are atomic in Room. The update survives database close/reopen; incoming deltas preserve the queued local row while advancing the sync checkpoint; canonical reconciliation removes the queue row; and retry payload construction retains the same operation ID and field-presence/null semantics. The existing replay loop dispatches the update through `mcp_update_task_with_scheduling` and refetches the canonical row.
 
-- Made history/detail content scrollable and removed the duplicate presentation of habits already listed as due today.
-- Kept completion, skip, history, streak, and detail behavior intact; no XP, leaderboards, or gamification was introduced.
+The existing server RPC validates `auth.uid()` ownership, limits the scheduling payload to approved keys, and uses an idempotency key. Its existing pgTAP coverage for owner isolation/idempotency was inspected; no server migration or policy changed. Android tests do not inject the Supabase transport, so RPC dispatch, lost-response replay, and network error backoff were not exercised end-to-end for this new operation. Existing offline-completion retry tests cover the shared queue retry behavior, not the update transport itself.
 
-## Analytics
+## Android CI
 
-- Added a TalkBack text description for chart values and a visible preparation state when the summary is null.
-- Kept existing bounded aggregation and chart implementation.
-- The current state model does not distinguish a null/loading summary from an analytics query failure. Chart contrast and screen-reader traversal need device review.
-
-## Settings
-
-- Constrained Settings content on wide windows and used shared layout tokens.
-- Kept existing appearance, account, planning, notification, privacy/data, and integration settings.
-- Calendar connected/disconnected, cached/stale, and refresh-error states remain in source. A signed-device Calendar flow was not exercised.
-
-## Widgets
-
-- Applied Vanta spacing/type tokens, theme-aware light/dark colors based on the stored appearance choice, clearer add affordance, and concise offline copy to the existing NOW/NEXT and Today compact families.
-- Appearance changes re-render installed widgets without rebuilding the task projection or scheduling work.
-- Owner-scoped local widget state, offline completion, and event/boundary refresh behavior remain intact by source review. Launcher resize classes and wallpaper contrast were not checked on device.
-
-## Motion and Haptics
-
-- Added shared short motion durations and reduced-motion lookup via Android's animator duration scale. Focus progress uses the shared reduced-motion-aware duration.
-- Added deliberate feedback to timeline reschedule outcomes and explicit Focus completion/end actions.
-- Shortened morning/evening briefing copy. Unique scheduling, date checks, time-zone rollover, and idempotence code were not changed.
-- No continuous decorative animation was introduced. Haptic preference behavior and motion need runtime verification.
-
-## Accessibility
-
-Source-level changes include selected-state semantics for navigation and Week dates, a chart text equivalent, Focus countdown/progress descriptions, timeline movement announcements, labeled widget add action, and scrollable Focus/habit detail content. Offline/error states remain visible.
-
-The following remain unverified: contrast ratios, TalkBack traversal, keyboard operation, touch-target measurements, large font scales, compact/expanded/landscape layouts, widget sizes, and reduced-motion behavior. Accessibility status is **PARTIAL**.
-
-## Performance
-
-The Today schedule projection no longer recomputes solely because the minute clock changes, and existing bounded queries, lazy Calendar/AI construction, leaf Focus countdown, and event-driven widget refresh remain in place by source review. No numeric baseline or after measurement was available. There is no evidence to classify a performance regression as absent or present; status is **NOT MEASURED**.
-
-The macrobenchmark and baseline-profile journey source now navigates Week/Habits and More destinations and opens/dismisses Quick Capture without creating task data. It has not been compiled or run. See [VANTA2_BATCH5_PERFORMANCE.md](VANTA2_BATCH5_PERFORMANCE.md) and [PERFORMANCE.md](PERFORMANCE.md).
-
-## CI Verification
+**PASS** — hosted release gate run `39714036235` passed on the checkpoint commit after correcting two Kotlin imports found by the first hosted attempt. The checkpoint run preceded Task Detail/Edit. Final Batch 5 Android and hosted checks for the task update are recorded after the final CI run below.
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Hosted Android compile | **FAIL — first run** | Gradle configured successfully, then Kotlin compilation reported wrong imports for `VantaSpacing` in Analytics and `LocalHapticFeedback` in Focus. Both imports are corrected in the follow-up commit; hosted rerun is pending. |
-| JVM tests | **NOT RUN TO COMPLETION** | The `testDebugUnitTest` task reached `compileDebugKotlin` and stopped on those source errors before executing tests. |
-| Lint, debug/release APK, androidTest APK | **NOT RUN** | The Android job stops when its JVM test/build step fails. |
-| Instrumentation / managed device | **NOT RUN** | The sequential Android job stopped before APK compilation and managed-device launch. |
-| Macrobenchmark / baseline profile | **NOT RUN** | No benchmark/profile task is part of this release gate run. |
-| Deno shared tests | **PASS** | `deno test --config supabase/deno.json supabase/functions/_shared`: 34 passed, 0 failed. |
-| Deno function type checks | **PASS** | `deno check --config supabase/deno.json` for `mcp`, `expand-schedules`, `sync-push`, and `send-reminders` exited 0. |
-| Consent lint | **PASS** | `npm run lint` in `web/consent` exited 0. |
-| Consent site build | **PASS** | `npm run build` in `web/consent` exited 0. |
-| Diff whitespace check | **PASS** | `git diff --check` reported no whitespace errors; Git printed line-ending normalization notices for edited files. |
+| Gradle configuration | **PASS** | Hosted Android release gate `39714036235` |
+| Android JVM tests | **PASS** | Hosted Android release gate `39714036235` |
+| Lint | **PASS** | Hosted Android release gate `39714036235` |
+| Debug/release APKs | **PASS** | Hosted Android release gate `39714036235` |
+| Android test APK | **PASS** | Hosted Android release gate `39714036235` |
+| Managed-device instrumentation and Room migration tests | **PASS** | Hosted Android release gate `39714036235`; this run tested the pre-editor checkpoint |
+| Deno shared tests | **PASS** | 34 passed, 0 failed |
+| Deno Edge Function checks | **PASS** | `mcp`, `expand-schedules`, `sync-push`, `send-reminders` |
+| Consent lint/build | **PASS** | `web/consent`: `npm run lint` and `npm run build` |
 
-The previous local Gradle attempt remains blocked before project configuration by the Windows selector/loopback issue. Hosted CI did compile the source and exposed two import errors; they were corrected after the first run. The follow-up hosted result determines the final Android CI status.
+**Final post-editor CI run:** pending.
+
+The local Windows Gradle wrapper still fails before project configuration with `Unable to establish loopback connection`; hosted Linux CI is the Android build/test evidence.
+
+## Instrumentation
+
+**PASS** — hosted managed-device instrumentation and Room migration tests passed in the pre-editor checkpoint run `39714036235`. Added Task Detail/Edit, large-font scroll, DAO update-queue, and Room v8→v9 migration tests are included in the final hosted gate; final post-editor status is pending.
+
+No Android device is attached locally. No screenshot matrix or interactive manual device session was completed.
+
+## Performance
+
+**NOT MEASURED** — the source-level review found no new root-level second timer and verified bounded Week/widget queries, lazy Calendar/AI construction, and event-driven widget refresh. It also records known root collection and minute-recomposition risks. Macrobenchmark and Baseline Profile source exists but was not run, and there are no before/after numeric measurements. See [VANTA2_BATCH5_PERFORMANCE.md](VANTA2_BATCH5_PERFORMANCE.md).
+
+## Accessibility
+
+**PARTIAL** — source and Compose tests cover selected-state semantics, task-card labels, detail heading and control values, polite validation/save announcements, Week task action role, and a 1.8× font-scale scroll case. Device contrast, TalkBack traversal, keyboard operation, touch-target dimensions, reduced-motion behavior, and light/dark screenshots were not manually verified.
+
+## Security and Secret Scan
+
+The editor uses the existing authenticated owner-checked RPC; it does not add a direct table write or unrestricted JSON mutation. No Supabase database or policy files were changed. The final secret-scan command and result will be recorded after scanning the completed diff.
 
 ## Known Limitations
 
-1. Task detail/edit UI and general task-field persistence are not implemented because the repository currently exposes no corresponding task update mutation.
-2. Android source has not compiled on this host; API/import/source compatibility must be confirmed on working CI.
-3. Instrumentation, macrobenchmarks, baseline profile generation, device interaction, and visual screenshot review remain outstanding.
-4. Performance regression is not measured. No runtime result supports a “none” claim.
-5. Accessibility review is source-only; device font scaling, contrast, TalkBack, and input traversal remain outstanding.
-6. Analytics null/loading and failure states are not distinct in the current state model.
-7. Existing task detail, conflict presentation, AI preview, and Calendar flows were not comprehensively redesigned or behavior-tested.
+1. Device screenshots and manual visual review were unavailable; there is no attached emulator/device.
+2. Performance and Baseline Profile results are **NOT MEASURED**.
+3. Accessibility remains **PARTIAL** pending TalkBack, contrast, keyboard, touch-target, and motion review on device.
+4. Update-specific Supabase transport replay and retry are not exercised end-to-end because the repository client is not injectable; Room durability, payload mapping, delta shielding, and canonical reconciliation are covered.
+5. The editor omits reminders and advanced placement-window fields. Scheduled tasks cannot be changed back to Flexible through this existing RPC.
+6. Local-created tasks remain read-only until their initial create mutation syncs.
+7. Analytics still maps a null summary to a preparation state because its state model has no distinct query-failure value.
 
-## Screenshots / Visual References
+## Recommended Next Step
 
-None. The workspace had no attached Android device or emulator, so Today light/dark, Week, Habits, Analytics, Settings, Quick Capture, Focus, and widget screenshots could not be captured or reviewed.
+Complete the final hosted release gate on the task-update commit and record its run. Then capture the screenshot matrix and perform TalkBack, contrast, reduced-motion, and macrobenchmark checks on a seeded Android device. Do not begin Batch 6 until the final CI evidence is recorded and these remaining Batch 5 checks are either completed or explicitly accepted as unavailable.
 
 ## Final Status
 
 ```text
-Batch 5 implementation: PARTIAL
-Android CI: FAIL on the first hosted run; import fixes applied, rerun pending
-Instrumentation: NOT RUN (Android job stopped before instrumentation APK/device launch)
-Performance regression: NOT MEASURED
-Accessibility review: PARTIAL
-Known blockers: Windows Gradle selector/loopback initialization; no attached emulator/device; no general task update mutation for task detail editing
-Recommended next step: Run Android CI and managed-device checks on the working CI host, then capture device screenshots and measurements before closing Batch 5.
+Implementation: PARTIAL
+Android CI: PASS (checkpoint run 39714036235; final post-editor run pending)
+Instrumentation: PASS (checkpoint run 39714036235; final post-editor run pending)
+Task Detail/Edit: PASS by source and added automated coverage; final hosted test result pending
+Offline Task Editing: PASS for Room queue, restart, delta protection, payload and reconciliation; RPC transport replay is not integration-tested
+Performance: NOT MEASURED
+Accessibility: PARTIAL
+Worktree: final status pending
+Batch 6: not started
 ```

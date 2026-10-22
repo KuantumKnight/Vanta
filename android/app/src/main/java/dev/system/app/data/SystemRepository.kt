@@ -380,6 +380,48 @@ class SystemRepository(
         SyncWorker.enqueue(appContext)
     }
 
+    /** Quick UI eligibility hint; updateTaskOccurrence performs the same checks atomically before queuing. */
+    suspend fun canUpdateTaskOccurrence(occurrenceId: String): Boolean {
+        val userId = visibleAccountUserId() ?: return false
+        val occurrence = dao.occurrence(userId, occurrenceId) ?: return false
+        if (occurrence.userId != userId || dao.hasPendingMutationForOccurrence(userId, occurrenceId) ||
+            dao.hasQueuedCompletion(userId, occurrenceId)
+        ) return false
+        return runCatching { validateTaskOccurrenceEligibility(occurrence) }.isSuccess
+    }
+
+    /** Queues a validated one-off task update, applies its local image, and lets the existing sync loop replay it. */
+    suspend fun updateTaskOccurrence(
+        occurrenceId: String,
+        update: TaskOccurrenceUpdate,
+    ): Result<CachedOccurrence> = try {
+        val optimistic = accountMutationMutex.withLock {
+            val userId = visibleAccountUserId()
+                ?: throw TaskOccurrenceUpdateValidationException("Sign in before editing a task.")
+            val occurrence = dao.occurrence(userId, occurrenceId)
+                ?: throw TaskOccurrenceUpdateValidationException("This task is no longer available.")
+            if (occurrence.userId != userId) {
+                throw TaskOccurrenceUpdateValidationException("This task belongs to a different account.")
+            }
+            if (dao.hasPendingMutationForOccurrence(userId, occurrenceId) || dao.hasQueuedCompletion(userId, occurrenceId)) {
+                throw TaskOccurrenceUpdateValidationException("This task already has a saved change. Sync or refresh before editing it again.")
+            }
+            val updated = update.applyTo(occurrence)
+            val mutation = update.toMutation(UUID.randomUUID().toString(), userId, occurrence)
+            check(dao.storeTaskUpdateMutation(mutation, occurrence, updated)) {
+                "This task changed before the edit could be saved. Refresh and try again."
+            }
+            updated
+        }
+        SystemWidget().updateAll(appContext)
+        SyncWorker.enqueue(appContext)
+        Result.success(optimistic)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Throwable) {
+        Result.failure(error)
+    }
+
     /** A week-only Room flow. The DAO limits this to 700 dated rows and 100 flexible tasks. */
     fun observePlannerWeek(weekStart: LocalDate): Flow<List<CachedOccurrence>> {
         val rangeStart = weekStart.atStartOfDay(VANTA_DATA_ZONE).toInstant().toString()
@@ -997,6 +1039,7 @@ class SystemRepository(
                 when (item.operationType) {
                     MUTATION_CREATE_TASK -> replayCreateMutation(item)
                     MUTATION_RESCHEDULE_OCCURRENCE -> replayRescheduleMutation(item)
+                    MUTATION_UPDATE_TASK -> replayTaskUpdateMutation(item)
                     else -> error("Unknown local mutation type.")
                 }
                 operationsApplied++
@@ -1137,6 +1180,20 @@ class SystemRepository(
         dao.reconcileRescheduledOccurrence(item.userId, item.operationId, response.occurrence.toCache(item.userId))
     }
 
+    private suspend fun replayTaskUpdateMutation(item: PendingMutation) {
+        ensureSameAuthenticatedUser(item.userId)
+        // The stable queued operationId is also the server idempotency key for every retry.
+        client.postgrest.rpc("mcp_update_task_with_scheduling", item.toUpdateTaskParams())
+        // This RPC has no revision in its response. Read its owner-scoped canonical row directly;
+        // do not advance the delta checkpoint past changes from other devices.
+        val canonical = client.from("task_occurrences").select(columns = occurrenceColumns()) {
+            filter { eq("id", requireNotNull(item.targetOccurrenceId)) }
+        }.decodeSingle<OccurrenceResponse>().toCache(item.userId)
+        check(dao.reconcileTaskUpdatedOccurrence(item.userId, item.operationId, canonical)) {
+            "The server returned a different task than the queued edit targeted."
+        }
+    }
+
     private fun occurrenceColumns() = Columns.raw("""
         id,task_id,scheduled_for,all_day,duration_minutes,schedule_type,priority,
         deadline_at,earliest_start,latest_end,preferred_start,status,completed_at,
@@ -1214,6 +1271,7 @@ class SystemRepository(
         private const val FCM_REGISTERED_USER_PREFERENCE = "registered_fcm_user_id"
         private const val MUTATION_CREATE_TASK = "create_task"
         private const val MUTATION_RESCHEDULE_OCCURRENCE = "reschedule_occurrence"
+        private const val MUTATION_UPDATE_TASK = "update_task"
     }
 }
 

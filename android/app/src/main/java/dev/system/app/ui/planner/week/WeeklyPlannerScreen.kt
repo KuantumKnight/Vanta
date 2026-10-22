@@ -79,6 +79,7 @@ internal fun WeeklyPlannerScreen(
     onReschedule: (ScheduleBlock) -> Unit,
     onScheduleFlexibleTask: (FlexibleTask, LocalDate) -> Unit,
     onQuickCapture: (LocalDate) -> Unit,
+    onOpenFlexibleTask: (FlexibleTask) -> Unit = {},
 ) {
     val range = remember(weekStart, weekStartDay) { weekDateRange(weekStart, weekStartDay) }
     val weekDates = remember(range.startInclusive) { range.dates() }
@@ -190,6 +191,7 @@ internal fun WeeklyPlannerScreen(
                 items(weekFlexibleTasks, key = { "flex-${it.occurrenceId}" }) { task ->
                     FlexibleTaskCard(
                         task = task,
+                        onOpenTask = { onOpenFlexibleTask(task) },
                         onSchedule = { onScheduleFlexibleTask(task, selectedDay) },
                     )
                 }
@@ -397,8 +399,15 @@ private fun ScheduleBlockCard(
         block.scheduleType == ScheduleType.SOFT -> "Moveable"
         else -> "Anytime"
     }
+    val inspectDescription = if (isCalendar) "Inspect calendar event ${block.title}" else "Open task details for ${block.title}"
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onInspect),
+        modifier = Modifier.fillMaxWidth()
+            .clickable(
+                role = Role.Button,
+                onClickLabel = inspectDescription,
+                onClick = onInspect,
+            )
+            .semantics { contentDescription = inspectDescription },
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = background),
     ) {
@@ -458,7 +467,7 @@ private fun FreeTimeCard(freeMinutes: Long) {
 }
 
 @Composable
-private fun FlexibleTaskCard(task: FlexibleTask, onSchedule: () -> Unit) {
+private fun FlexibleTaskCard(task: FlexibleTask, onOpenTask: () -> Unit, onSchedule: () -> Unit) {
     val locale = LocalLocale.current.platformLocale
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -469,7 +478,8 @@ private fun FlexibleTaskCard(task: FlexibleTask, onSchedule: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f).clickable(role = Role.Button, onClick = onOpenTask)
+                .semantics { contentDescription = "Open details for ${task.title}" }) {
                 Text(task.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 val duration = if (task.durationMinutes > 0) formatHours(task.durationMinutes.toLong()) else "Duration unset"
                 val deadline = task.deadlineAt?.let { " · due ${DateTimeFormatter.ofPattern("EEE, MMM d", locale).format(it.atZone(java.time.ZoneId.systemDefault()))}" }.orEmpty()
@@ -480,7 +490,10 @@ private fun FlexibleTaskCard(task: FlexibleTask, onSchedule: () -> Unit) {
                     modifier = Modifier.padding(top = 3.dp),
                 )
             }
-            OutlinedButton(onClick = onSchedule) { Text("Schedule") }
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = onOpenTask) { Text("Details") }
+                OutlinedButton(onClick = onSchedule) { Text("Schedule") }
+            }
         }
     }
 }

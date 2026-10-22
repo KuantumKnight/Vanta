@@ -94,6 +94,7 @@ internal fun TodayTimeline(
     emptyTitle: String,
     emptyBody: String,
     onComplete: (CachedOccurrence) -> Unit,
+    onOpenTask: (CachedOccurrence) -> Unit = {},
     onReschedule: (CachedOccurrence, Instant) -> Unit = { _, _ -> },
     onStartFocus: (CachedOccurrence) -> Unit = {},
     snapIntervalMinutes: Int = DEFAULT_TIME_SLOT_MINUTES,
@@ -185,7 +186,7 @@ internal fun TodayTimeline(
                 VantaSectionHeader("Overdue", "${overdue.size} waiting")
             }
             items(overdue, key = { "overdue-${it.id}" }) { row ->
-                TaskCard(row = row, onComplete = onComplete)
+                TaskCard(row = row, onComplete = onComplete, onOpenTask = onOpenTask)
             }
         }
 
@@ -223,6 +224,7 @@ internal fun TodayTimeline(
                             scheduled = basePlan.scheduled,
                             calendarBlocks = dayCalendarBlocks,
                             onComplete = onComplete,
+                            onOpenTask = onOpenTask,
                             onReschedule = onReschedule,
                             onStartFocus = onStartFocus,
                             snapIntervalMinutes = snapIntervalMinutes,
@@ -243,7 +245,7 @@ internal fun TodayTimeline(
                 VantaSectionHeader("Anytime", "${fitIntoToday.size} ${if (fitIntoToday.size == 1) "task" else "tasks"}")
             }
             items(fitIntoToday, key = { "fit-${it.id}" }) { row ->
-                TaskCard(row = row, onComplete = onComplete)
+                TaskCard(row = row, onComplete = onComplete, onOpenTask = onOpenTask)
             }
         }
     }
@@ -290,6 +292,7 @@ private fun TimelineEventRow(
     scheduled: List<TimelineBlock>,
     calendarBlocks: List<ScheduleBlock>,
     onComplete: (CachedOccurrence) -> Unit,
+    onOpenTask: (CachedOccurrence) -> Unit,
     onReschedule: (CachedOccurrence, Instant) -> Unit,
     onStartFocus: (CachedOccurrence) -> Unit,
     snapIntervalMinutes: Int,
@@ -475,6 +478,7 @@ private fun TimelineEventRow(
                     }
                     if (canReschedule) {
                         Row(horizontalArrangement = Arrangement.spacedBy(VantaSpacing.xxs)) {
+                            TextButton(onClick = { onOpenTask(source) }) { Text("Details") }
                             TextButton(
                                 onClick = {
                                     TimePickerDialog(
@@ -501,6 +505,8 @@ private fun TimelineEventRow(
                                 Text("Start focus")
                             }
                         }
+                    } else {
+                        TextButton(onClick = { onOpenTask(source) }) { Text("Details") }
                     }
                 }
                 Checkbox(

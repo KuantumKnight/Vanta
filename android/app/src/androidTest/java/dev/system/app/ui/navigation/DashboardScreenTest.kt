@@ -15,6 +15,11 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.Modifier
 import dev.system.app.data.CachedOccurrence
+import dev.system.app.planner.DaySchedule
+import dev.system.app.planner.FlexibleTask
+import dev.system.app.planner.ScheduleBlock
+import dev.system.app.planner.ScheduleSource
+import dev.system.app.planner.ScheduleType
 import dev.system.app.settings.UserPreferences
 import dev.system.app.ui.components.TaskTimeZone
 import dev.system.app.ui.quickcapture.QuickCaptureLaunchRequest
@@ -117,6 +122,170 @@ class DashboardScreenTest {
         composeRule.onNodeWithContentDescription("Mark Study task complete").performClick()
         composeRule.waitUntil(timeoutMillis = 2_000) { completed.get() != null }
         composeRule.runOnIdle { assertEquals("today-occurrence", completed.get()?.id) }
+    }
+
+    @Test
+    fun todayTaskOpensItsDetailSurface() {
+        val anytimeTask = todayTask().copy(scheduledFor = null, allDay = false, scheduleType = "FLEXIBLE")
+        composeRule.setContent {
+            MaterialTheme {
+                DashboardScreen(
+                    modifier = Modifier,
+                    selectedTab = DashboardTab.Today,
+                    onTabSelected = {},
+                    pending = listOf(anytimeTask),
+                    completionQueue = emptyList(),
+                    syncError = null,
+                    syncing = false,
+                    lastSyncedAt = null,
+                    goals = emptyList(),
+                    goalsLoading = false,
+                    goalsError = null,
+                    habits = emptyList(),
+                    selectedHabitDetail = null,
+                    morningBriefing = null,
+                    analyticsSummary = null,
+                    showPlannedVsActual = false,
+                    eveningReviewSummary = null,
+                    dailyReviewNote = "",
+                    dailyReviewFinished = false,
+                    resolvedReviewOccurrenceIds = emptySet(),
+                    userPreferences = UserPreferences(),
+                    notificationPermissionGranted = true,
+                    notificationSettingsRecommended = false,
+                    onEnableNotifications = {},
+                    onRetrySync = {},
+                    onRetryGoals = {},
+                    onDismissCompletion = {},
+                    onComplete = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Open details for Study task").performClick()
+        composeRule.onNodeWithText("Edit").assertIsDisplayed()
+        composeRule.onNodeWithText("Start focus").assertIsDisplayed()
+        composeRule.onNodeWithText("Complete").assertIsDisplayed()
+    }
+
+    @Test
+    fun weekTaskBlockOpensDetailInsteadOfCalendarInspect() {
+        val row = todayTask()
+        val date = LocalDate.now(TaskTimeZone)
+        val start = date.atTime(9, 0).atZone(TaskTimeZone).toInstant()
+        val schedule = DaySchedule(
+            date = date,
+            zoneId = TaskTimeZone,
+            planningStart = date.atStartOfDay(TaskTimeZone).toInstant(),
+            planningEnd = date.plusDays(1).atStartOfDay(TaskTimeZone).toInstant(),
+            blocks = listOf(
+                ScheduleBlock(
+                    id = row.id,
+                    source = ScheduleSource.VANTA_TASK,
+                    title = row.title,
+                    start = start,
+                    end = start.plusSeconds(30 * 60),
+                    scheduleType = ScheduleType.SOFT,
+                    editable = true,
+                ),
+            ),
+            flexibleTasks = emptyList(),
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                DashboardScreen(
+                    modifier = Modifier,
+                    selectedTab = DashboardTab.Week,
+                    onTabSelected = {},
+                    pending = emptyList(),
+                    completionQueue = emptyList(),
+                    syncError = null,
+                    syncing = false,
+                    lastSyncedAt = null,
+                    goals = emptyList(),
+                    goalsLoading = false,
+                    goalsError = null,
+                    habits = emptyList(),
+                    selectedHabitDetail = null,
+                    morningBriefing = null,
+                    analyticsSummary = null,
+                    showPlannedVsActual = false,
+                    eveningReviewSummary = null,
+                    dailyReviewNote = "",
+                    dailyReviewFinished = false,
+                    resolvedReviewOccurrenceIds = emptySet(),
+                    userPreferences = UserPreferences(),
+                    notificationPermissionGranted = true,
+                    notificationSettingsRecommended = false,
+                    onEnableNotifications = {},
+                    onRetrySync = {},
+                    onRetryGoals = {},
+                    onDismissCompletion = {},
+                    onComplete = {},
+                    plannerSchedulesByDate = mapOf(date to schedule),
+                    plannerWeekOccurrences = listOf(row),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Inspect").performClick()
+        composeRule.onNodeWithText("Edit").assertIsDisplayed()
+        composeRule.onNodeWithText("Task details · changes save on this phone first").assertIsDisplayed()
+    }
+
+    @Test
+    fun weekFlexibleTaskOpensDetail() {
+        val row = todayTask().copy(scheduledFor = null, allDay = false, scheduleType = "FLEXIBLE")
+        val date = LocalDate.now(TaskTimeZone)
+        val schedule = DaySchedule(
+            date = date,
+            zoneId = TaskTimeZone,
+            planningStart = date.atStartOfDay(TaskTimeZone).toInstant(),
+            planningEnd = date.plusDays(1).atStartOfDay(TaskTimeZone).toInstant(),
+            blocks = emptyList(),
+            flexibleTasks = emptyList(),
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                DashboardScreen(
+                    modifier = Modifier,
+                    selectedTab = DashboardTab.Week,
+                    onTabSelected = {},
+                    pending = listOf(row),
+                    completionQueue = emptyList(),
+                    syncError = null,
+                    syncing = false,
+                    lastSyncedAt = null,
+                    goals = emptyList(),
+                    goalsLoading = false,
+                    goalsError = null,
+                    habits = emptyList(),
+                    selectedHabitDetail = null,
+                    morningBriefing = null,
+                    analyticsSummary = null,
+                    showPlannedVsActual = false,
+                    eveningReviewSummary = null,
+                    dailyReviewNote = "",
+                    dailyReviewFinished = false,
+                    resolvedReviewOccurrenceIds = emptySet(),
+                    userPreferences = UserPreferences(),
+                    notificationPermissionGranted = true,
+                    notificationSettingsRecommended = false,
+                    onEnableNotifications = {},
+                    onRetrySync = {},
+                    onRetryGoals = {},
+                    onDismissCompletion = {},
+                    onComplete = {},
+                    plannerSchedulesByDate = mapOf(date to schedule),
+                    plannerFlexibleTasks = listOf(FlexibleTask(row.id, row.title, 30)),
+                    plannerWeekOccurrences = listOf(row),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Details").performClick()
+        composeRule.onNodeWithText("Edit").assertIsDisplayed()
+        composeRule.onNodeWithText("Anytime").assertIsDisplayed()
     }
 
     @Test

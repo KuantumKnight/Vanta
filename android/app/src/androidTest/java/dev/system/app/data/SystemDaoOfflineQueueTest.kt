@@ -13,6 +13,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.IOException
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
@@ -279,6 +280,116 @@ class SystemDaoOfflineQueueTest {
         assertEquals(optimisticSchedule, dao.occurrence(USER_A, original.id)?.scheduledFor)
         assertEquals(1L, dao.syncCheckpoint(USER_A)?.revision)
         assertEquals(1, dao.pendingMutations(USER_A).size)
+    }
+
+    @Test
+    fun taskUpdateMutationAndOptimisticImageSurviveReopenAndReconcileFromCanonicalRow() = runBlocking {
+        val original = occurrence("update-target").copy(
+            allDay = false,
+            scheduleType = "SOFT",
+            notes = "Old notes",
+            deadlineAt = "2026-09-27T10:00:00Z",
+        )
+        val update = TaskOccurrenceUpdate(
+            title = FieldChange.Set("Offline edit"),
+            notes = FieldChange.Set<String?>(null),
+            deadlineAt = FieldChange.Set<Instant?>(null),
+        )
+        val optimistic = update.applyTo(original)
+        val mutation = update.toMutation("update-operation", USER_A, original)
+        val dao = database.systemDao()
+        dao.replaceOccurrences(listOf(original))
+
+        assertTrue(dao.storeTaskUpdateMutation(mutation, original, optimistic))
+        dao.markMutationRetry(
+            userId = USER_A,
+            operationId = mutation.operationId,
+            retryCount = 1,
+            attemptAt = 50L,
+            nextAttemptAt = 5_000L,
+            errorCode = "TEMPORARY_FAILURE",
+            message = "retry later",
+        )
+        database.close()
+        database = newDatabase()
+
+        val reopened = database.systemDao()
+        assertEquals(optimistic, reopened.occurrence(USER_A, original.id))
+        val persistedMutation = reopened.pendingMutations(USER_A).single()
+        assertEquals("update-operation", persistedMutation.operationId)
+        assertEquals("update_task", persistedMutation.operationType)
+        assertEquals("task-update-target", persistedMutation.targetTaskId)
+        assertTrue(persistedMutation.updateTitle)
+        assertTrue(persistedMutation.updateNotes)
+        assertTrue(persistedMutation.updateDeadlineAt)
+        assertEquals(null, persistedMutation.notes)
+        assertEquals(mutation.toUpdateTaskParams(), persistedMutation.toUpdateTaskParams())
+        assertEquals("update-operation", persistedMutation.operationId)
+        assertEquals(5_000L, persistedMutation.nextAttemptAt)
+        assertEquals(null, reopened.nextDuePendingMutation(USER_A, 4_999L))
+        assertEquals("update-operation", reopened.nextDuePendingMutation(USER_A, 5_000L)?.operationId)
+
+        reopened.applyDeltaPage(
+            USER_A,
+            listOf(OccurrenceDelta(2, original.id, false, original.copy(title = "Stale delta"))),
+            revision = 2,
+        )
+        assertEquals(optimistic, reopened.occurrence(USER_A, original.id))
+        assertEquals(2L, reopened.syncCheckpoint(USER_A)?.revision)
+
+        val canonical = optimistic.copy(title = "Canonical server title", priority = "HIGH")
+        assertTrue(reopened.reconcileTaskUpdatedOccurrence(USER_A, "update-operation", canonical))
+        assertEquals(canonical, reopened.occurrence(USER_A, original.id))
+        assertTrue(reopened.pendingMutations(USER_A).isEmpty())
+    }
+
+    @Test
+    fun taskUpdateQueueRejectsWrongKindLocalIdsAndExistingWork() = runBlocking {
+        val dao = database.systemDao()
+        val ordinary = occurrence("ordinary").copy(allDay = false, scheduleType = "SOFT")
+        val update = TaskOccurrenceUpdate(title = FieldChange.Set("Updated"))
+        val optimistic = update.applyTo(ordinary)
+        val mutation = update.toMutation("ordinary-update", USER_A, ordinary)
+        dao.replaceOccurrences(listOf(ordinary))
+
+        assertFalse(dao.storeTaskUpdateMutation(mutation.copy(userId = USER_B), ordinary, optimistic))
+        val habit = ordinary.copy(id = "habit-update", taskId = "habit-task", kind = "habit")
+        dao.replaceOccurrences(listOf(habit))
+        assertFalse(dao.storeTaskUpdateMutation(
+            mutation.copy(operationId = "habit-update-op", targetOccurrenceId = habit.id, targetTaskId = habit.taskId),
+            habit,
+            habit.copy(title = "Updated"),
+        ))
+        assertFalse(
+            dao.storeTaskUpdateMutation(
+                mutation.copy(targetOccurrenceId = "local:task", targetTaskId = "local:task"),
+                ordinary.copy(id = "local:task", taskId = "local:task"),
+                optimistic.copy(id = "local:task", taskId = "local:task"),
+            ),
+        )
+        assertTrue(dao.storeRescheduleMutation(
+            PendingMutation(
+                operationId = "earlier-reschedule",
+                userId = USER_A,
+                operationType = "reschedule_occurrence",
+                targetOccurrenceId = ordinary.id,
+                scheduledFor = "2026-09-25T12:30:00Z",
+            ),
+            ordinary.copy(scheduledFor = "2026-09-25T12:30:00Z"),
+        ))
+        val rescheduled = dao.occurrence(USER_A, ordinary.id)!!
+        val afterReschedule = update.applyTo(rescheduled)
+        assertFalse(dao.storeTaskUpdateMutation(
+            update.toMutation("update-after-reschedule", USER_A, rescheduled),
+            rescheduled,
+            afterReschedule,
+        ))
+
+        val completed = occurrence("completed-update").copy(allDay = false, scheduleType = "SOFT")
+        dao.replaceOccurrences(listOf(completed))
+        dao.addPendingCompletion(PendingCompletion("completion-before-update", completed.id, userId = USER_A))
+        val completedUpdate = update.toMutation("update-after-completion", USER_A, completed)
+        assertFalse(dao.storeTaskUpdateMutation(completedUpdate, completed, update.applyTo(completed)))
     }
 
     private suspend fun queuedDao(vararg occurrences: CachedOccurrence): SystemDao {

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,7 +31,11 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 
 @Composable
-internal fun TaskCard(row: CachedOccurrence, onComplete: (CachedOccurrence) -> Unit) {
+internal fun TaskCard(
+    row: CachedOccurrence,
+    onComplete: (CachedOccurrence) -> Unit,
+    onOpenTask: (CachedOccurrence) -> Unit = {},
+) {
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val scheduleType = remember(row.scheduleType) {
@@ -57,7 +63,8 @@ internal fun TaskCard(row: CachedOccurrence, onComplete: (CachedOccurrence) -> U
             horizontalArrangement = Arrangement.spacedBy(VantaSpacing.xs),
         ) {
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).clickable(role = Role.Button) { onOpenTask(row) }
+                    .semantics { contentDescription = "Open details for ${row.title}" },
                 verticalArrangement = Arrangement.spacedBy(VantaSpacing.xxs),
             ) {
                 Text(

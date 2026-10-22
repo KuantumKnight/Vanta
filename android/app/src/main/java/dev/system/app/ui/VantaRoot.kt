@@ -34,8 +34,11 @@ import dev.system.app.briefing.BriefingOccurrence
 import dev.system.app.briefing.MorningBriefing
 import dev.system.app.briefing.MorningBriefingBuilder
 import dev.system.app.data.CachedOccurrence
+import dev.system.app.data.FieldChange
 import dev.system.app.data.GoalProgress
 import dev.system.app.data.SystemRepository
+import dev.system.app.data.TaskOccurrenceSchedule
+import dev.system.app.data.TaskOccurrenceUpdate
 import dev.system.app.SystemApplication
 import dev.system.app.BuildConfig
 import dev.system.app.calendar.CalendarAuthorizationResult
@@ -103,6 +106,36 @@ private fun dateRange(start: LocalDate, dayCount: Long, zoneId: ZoneId): Calenda
         start = start.atStartOfDay(zoneId).toInstant(),
         endExclusive = start.plusDays(dayCount).atStartOfDay(zoneId).toInstant(),
         zoneId = zoneId,
+    )
+}
+
+private fun taskOccurrenceUpdate(
+    row: CachedOccurrence,
+    submission: QuickCaptureSubmission,
+): TaskOccurrenceUpdate {
+    val currentScheduledFor = row.scheduledFor?.let { runCatching { Instant.parse(it) }.getOrNull() }
+    val scheduleChanged = submission.scheduledFor != null &&
+        (currentScheduledFor != submission.scheduledFor || row.allDay != submission.allDay)
+    val scheduleTypeChanged = row.scheduleType != submission.scheduleType.name
+    val currentDeadline = row.deadlineAt?.let { runCatching { Instant.parse(it) }.getOrNull() }
+    val currentPreferred = row.preferredStart?.let { runCatching { Instant.parse(it) }.getOrNull() }
+    val timingChanged = scheduleChanged || scheduleTypeChanged
+
+    return TaskOccurrenceUpdate(
+        title = if (submission.title != row.title) FieldChange.Set(submission.title) else FieldChange.Unchanged,
+        notes = if (submission.notes != row.notes) FieldChange.Set(submission.notes) else FieldChange.Unchanged,
+        schedule = if (scheduleChanged) {
+            FieldChange.Set(TaskOccurrenceSchedule(checkNotNull(submission.scheduledFor), submission.allDay))
+        } else FieldChange.Unchanged,
+        durationMinutes = if (submission.durationMinutes != row.durationMinutes) {
+            FieldChange.Set(submission.durationMinutes)
+        } else FieldChange.Unchanged,
+        scheduleType = if (scheduleTypeChanged) FieldChange.Set(submission.scheduleType) else FieldChange.Unchanged,
+        priority = if (submission.priority.name != row.priority) FieldChange.Set(submission.priority) else FieldChange.Unchanged,
+        deadlineAt = if (submission.deadlineAt != currentDeadline) FieldChange.Set(submission.deadlineAt) else FieldChange.Unchanged,
+        preferredStart = if (timingChanged && submission.preferredStart != currentPreferred) {
+            FieldChange.Set(submission.preferredStart)
+        } else FieldChange.Unchanged,
     )
 }
 
@@ -702,6 +735,13 @@ internal fun VantaRoot(
                                 onRetryGoals = { scope.launch { refreshGoals() } },
                                 onDismissCompletion = { key -> scope.launch { repository.dismissTerminalCompletion(key) } },
                                 onComplete = ::completeOccurrence,
+                                onSaveTask = { row, submission ->
+                                    val update = taskOccurrenceUpdate(row, submission)
+                                    if (update != TaskOccurrenceUpdate()) {
+                                        repository.updateTaskOccurrence(row.id, update).getOrThrow()
+                                    }
+                                },
+                                canEditTask = { row -> repository.canUpdateTaskOccurrence(row.id) },
                                 onCreateTask = { submission: QuickCaptureSubmission ->
                                     scope.launch {
                                         runCatching {
@@ -796,6 +836,7 @@ internal fun VantaRoot(
                                 plannerWeekStart = plannerWeekStart,
                                 plannerSchedulesByDate = plannerSchedulesByDate,
                                 plannerFlexibleTasks = plannerFlexibleTasks,
+                                plannerWeekOccurrences = plannerWeekOccurrences,
                                 onPlannerWeekChanged = { plannerWeekStart = it },
                                 planContext = todayPlanningContext,
                                 planUiState = aiPlanState,
