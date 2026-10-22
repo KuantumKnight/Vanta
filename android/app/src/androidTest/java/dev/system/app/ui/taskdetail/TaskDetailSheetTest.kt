@@ -4,13 +4,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -120,7 +122,7 @@ class TaskDetailSheetTest {
         composeRule.onNodeWithText("Cancel edit").performScrollTo().performClick()
         composeRule.onNodeWithText("Discard").performClick()
         composeRule.onNodeWithText("Edit").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Task title").assertDoesNotExist()
+        composeRule.onAllNodesWithContentDescription("Task title").assertCountEquals(0)
         assertTrue(!dismissed.get())
     }
 
@@ -159,7 +161,7 @@ class TaskDetailSheetTest {
         }
 
         composeRule.onNodeWithText("Completed task · details are read-only").assertIsDisplayed()
-        composeRule.onNodeWithText("Task notes").assertDoesNotExist()
+        composeRule.onAllNodesWithText("Task notes").assertCountEquals(0)
         composeRule.onNodeWithText("Close").assertIsDisplayed()
     }
 
@@ -178,7 +180,7 @@ class TaskDetailSheetTest {
         }
 
         composeRule.onNodeWithText("Habit occurrence · details are read-only").assertIsDisplayed()
-        composeRule.onNodeWithText("Edit").assertDoesNotExist()
+        composeRule.onAllNodesWithText("Edit").assertCountEquals(0)
     }
 
     @Test
@@ -196,7 +198,7 @@ class TaskDetailSheetTest {
             }
         }
 
-        composeRule.onNodeWithText("Edit").assertDoesNotExist()
+        composeRule.onAllNodesWithText("Edit").assertCountEquals(0)
         composeRule.onNodeWithText("This task is read-only").assertIsDisplayed()
         composeRule.onNodeWithText("Start focus").assertIsDisplayed()
         composeRule.onNodeWithText("Complete").assertIsDisplayed()
